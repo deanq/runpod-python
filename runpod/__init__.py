@@ -42,8 +42,6 @@ if _credentials is not None:
 else:
     api_key = None  # pylint: disable=invalid-name
 
-api_url_base = os.environ.get("RUNPOD_API_BASE_URL", "https://api.runpod.io")  # pylint: disable=invalid-name
-
 endpoint_url_base = os.environ.get("RUNPOD_ENDPOINT_BASE_URL", "https://api.runpod.ai/v2")  # pylint: disable=invalid-name
 
 
