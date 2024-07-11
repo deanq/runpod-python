@@ -36,8 +36,6 @@ async def _transmit(client_session, url, job_data):
     async with retry_client.post(url, **kwargs) as client_response:
         await client_response.text()
 
-    await retry_client.close()
-
 
 async def _handle_result(session, job_data, job, url_template, log_message, is_stream=False): # pylint: disable=too-many-arguments
     """
