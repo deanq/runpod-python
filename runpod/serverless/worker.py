@@ -15,6 +15,7 @@ from runpod.serverless.modules import (
 )
 from .modules.rp_job import run_job, run_job_generator
 from .modules.rp_http import send_result, stream_result
+from .modules.rp_trace import get_tracer
 from .modules.worker_state import REF_COUNT_ZERO, Jobs
 from .utils import rp_debugger
 
@@ -97,7 +98,8 @@ async def run_worker(config: Dict[str, Any]) -> None:
     client_session = aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(limit=0),
         headers=_get_auth_header(),
-        timeout=aiohttp.ClientTimeout(total=300, connect=2, sock_connect=2)
+        timeout=aiohttp.ClientTimeout(600, ceil_threshold=400),
+        trace_configs=[get_tracer()]
     )
 
     async with client_session as session:

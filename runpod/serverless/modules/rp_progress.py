@@ -11,6 +11,7 @@ import aiohttp
 
 from runpod.serverless.modules.rp_logger import RunPodLogger
 from .rp_http import send_result
+from .rp_trace import get_tracer
 
 log = RunPodLogger()
 
@@ -24,7 +25,8 @@ async def _create_session_async():
 
     return aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(limit=None),
-        headers=auth_header, timeout=timeout
+        headers=auth_header, timeout=timeout,
+        trace_configs=[get_tracer()]
     )
 
 

@@ -134,3 +134,9 @@ class RunPodLogger:
         tip log
         '''
         self.log(message, 'TIP')
+
+    def trace(self, message):
+        '''
+        trace log (buffered until flushed)
+        '''
+        self.log(f"TRACE | {message}", 'INFO')
