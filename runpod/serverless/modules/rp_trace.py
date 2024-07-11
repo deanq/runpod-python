@@ -109,6 +109,7 @@ def get_tracer() -> TraceConfig:
     trace_config = TraceConfig()
 
     if os.getenv("RUNPOD_TRACE"):
+        log.trace("RUNPOD_TRACE is enabled")
         trace_config.on_request_start.append(on_request_start)
         trace_config.on_request_end.append(on_request_end)
         trace_config.on_response_chunk_received.append(on_response_chunk_received)
