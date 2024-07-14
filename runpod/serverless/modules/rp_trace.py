@@ -1,3 +1,5 @@
+# https://docs.aiohttp.org/en/stable/tracing_reference.html
+
 import os
 from aiohttp import (
     TraceConfig,
@@ -23,86 +25,119 @@ from .rp_logger import RunPodLogger
 log = RunPodLogger()
 
 
-async def on_request_start(session, trace_config_ctx, params: TraceRequestStartParams):
+async def on_request_start(session, context, params: TraceRequestStartParams):
     log.trace(f"on_request_start {params.method} {params.url}")
+    context.on_request_start = session.loop.time()
 
 
 async def on_request_chunk_sent(
-    session, trace_config_ctx, params: TraceRequestChunkSentParams
+    session, context, params: TraceRequestChunkSentParams
 ):
-    log.trace(f"on_request_chunk_sent {params.method} {params.url}")
+    elapsed = session.loop.time() - context.on_request_start
+    log.trace(f"on_request_chunk_sent | {elapsed} ms")
 
 
 async def on_response_chunk_received(
-    session, trace_config_ctx, params: TraceResponseChunkReceivedParams
+    session, context, params: TraceResponseChunkReceivedParams
 ):
-    log.trace(f"on_response_chunk_received {params.method} {params.url}")
+    elapsed = session.loop.time() - context.on_request_start
+    log.trace(f"on_response_chunk_received | {elapsed} ms")
 
 
-async def on_request_end(session, trace_config_ctx, params: TraceRequestEndParams):
-    log.trace(f"on_request_end {params.method} {params.url}")
+async def on_request_end(session, context, params: TraceRequestEndParams):
+    elapsed = session.loop.time() - context.on_request_start
+    log.trace(f"on_request_end | {elapsed} ms")
+
+    elapsed = session.loop.time() - context.on_request_start
+    context.on_request_end = elapsed
+
+    dns_lookup = context.on_dns_resolvehost_end - context.on_dns_resolvehost_start
+    connect = context.on_connection_create_end - dns_lookup
+    transfer = elapsed - context.on_connection_create_end
+
+    report = {
+        "dns_lookup_and_dial": round(dns_lookup * 1000, 2),
+        "connect": round(connect * 1000, 2),
+        "transfer": round(transfer * 1000, 2),
+        "total": round(elapsed * 1000, 2),
+    }
+    log.trace(report)
 
 
 async def on_request_exception(
-    session, trace_config_ctx, params: TraceRequestExceptionParams
+    session, context, params: TraceRequestExceptionParams
 ):
-    log.trace(f"on_request_exception {params.method} {params.url} {params.exception}")
+    elapsed = session.loop.time() - context.on_request_start
+    log.trace(f"on_request_exception {params.exception} | {elapsed} ms")
 
 
 async def on_request_redirect(
-    session, trace_config_ctx, params: TraceRequestRedirectParams
+    session, context, params: TraceRequestRedirectParams
 ):
-    log.trace(f"on_request_redirect {params.response.status} {params.response.url}")
+    elapsed = session.loop.time() - context.on_request_start
+    log.trace(f"on_request_redirect {params.response.status} | {elapsed} ms")
 
 
 async def on_connection_queued_start(
-    session, trace_config_ctx, params: TraceConnectionQueuedStartParams
+    session, context, params: TraceConnectionQueuedStartParams
 ):
-    log.trace(f"on_connection_queued_start")
+    elapsed = session.loop.time() - context.on_request_start
+    log.trace(f"on_connection_queued_start | {elapsed} ms")
 
 
 async def on_connection_queued_end(
-    session, trace_config_ctx, params: TraceConnectionQueuedEndParams
+    session, context, params: TraceConnectionQueuedEndParams
 ):
-    log.trace(f"on_connection_queued_end")
+    elapsed = session.loop.time() - context.on_request_start
+    log.trace(f"on_connection_queued_end | {elapsed} ms")
 
 
 async def on_connection_create_start(
-    session, trace_config_ctx, params: TraceConnectionCreateStartParams
+    session, context, params: TraceConnectionCreateStartParams
 ):
-    log.trace(f"on_connection_create_start")
+    elapsed = session.loop.time() - context.on_request_start
+    log.trace(f"on_connection_create_start | {elapsed} ms")
 
 
 async def on_connection_create_end(
-    session, trace_config_ctx, params: TraceConnectionCreateEndParams
+    session, context, params: TraceConnectionCreateEndParams
 ):
-    log.trace(f"on_connection_create_end")
+    elapsed = session.loop.time() - context.on_request_start
+    context.on_connection_create_end = elapsed
+    log.trace(f"on_connection_create_end | {elapsed} ms")
 
 
 async def on_connection_reuseconn(
-    session, trace_config_ctx, params: TraceConnectionReuseconnParams
+    session, context, params: TraceConnectionReuseconnParams
 ):
-    log.trace(f"on_connection_reuseconn")
+    elapsed = session.loop.time() - context.on_request_start
+    log.trace(f"on_connection_reuseconn | {elapsed} ms")
 
 
 async def on_dns_resolvehost_start(
-    session, trace_config_ctx, params: TraceDnsResolveHostStartParams
+    session, context, params: TraceDnsResolveHostStartParams
 ):
-    log.trace(f"on_dns_resolvehost_start {params.host}")
+    elapsed = session.loop.time() - context.on_request_start
+    context.on_dns_resolvehost_start = elapsed
+    log.trace(f"on_dns_resolvehost_start {params.host} | {elapsed} ms")
 
 
 async def on_dns_resolvehost_end(
-    session, trace_config_ctx, params: TraceDnsResolveHostEndParams
+    session, context, params: TraceDnsResolveHostEndParams
 ):
-    log.trace(f"on_dns_resolvehost_end {params.host}")
+    elapsed = session.loop.time() - context.on_request_start
+    context.on_dns_resolvehost_end = elapsed
+    log.trace(f"on_dns_resolvehost_end {params.host} | {elapsed} ms")
 
 
-async def on_dns_cache_hit(session, trace_config_ctx, params: TraceDnsCacheHitParams):
-    log.trace(f"on_dns_cache_hit {params.host}")
+async def on_dns_cache_hit(session, context, params: TraceDnsCacheHitParams):
+    elapsed = session.loop.time() - context.on_request_start
+    log.trace(f"on_dns_cache_hit {params.host} | {elapsed} ms")
 
 
-async def on_dns_cache_miss(session, trace_config_ctx, params: TraceDnsCacheMissParams):
-    log.trace(f"on_dns_cache_miss {params.host}")
+async def on_dns_cache_miss(session, context, params: TraceDnsCacheMissParams):
+    elapsed = session.loop.time() - context.on_request_start
+    log.trace(f"on_dns_cache_miss {params.host} | {elapsed} ms")
 
 
 def get_tracer() -> TraceConfig:
