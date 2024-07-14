@@ -146,8 +146,8 @@ class RunPodLogger:
 
     def trace_flush(self, reset: bool = False):
         '''
-        Flush all trace logs to info level or reset the debug queue.
-        If reset is True, it will empty the debug_queue without logging the messages.
+        Flush all trace logs to info level or reset the trace queue.
+        If reset is True, it will empty the trace_queue without logging the messages.
         '''
         if reset:
             self.trace_queue.clear()
