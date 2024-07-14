@@ -12,7 +12,7 @@ ERROR - 4 - Serious problem, the software has not been able to perform some func
 
 import os
 import json
-from typing import Optional
+from typing import Optional, List, Dict
 
 
 MAX_MESSAGE_LENGTH = 4096
@@ -48,6 +48,7 @@ class RunPodLogger:
         'RUNPOD_LOG_LEVEL',
         os.environ.get('RUNPOD_DEBUG_LEVEL', 'DEBUG'))
     )
+    trace_queue: List[Dict[str, str]] = []
 
     def __new__(cls):
         if RunPodLogger.__instance is None:
@@ -127,6 +128,7 @@ class RunPodLogger:
         '''
         error log
         '''
+        self.trace_flush()
         self.log(message, 'ERROR', request_id)
 
     def tip(self, message):
@@ -139,4 +141,17 @@ class RunPodLogger:
         '''
         trace log (buffered until flushed)
         '''
-        self.log(f"TRACE | {message}", 'INFO', request_id)
+        trace_message = f"TRACE | {message}"
+        self.trace_queue.append({"message": trace_message, "request_id": request_id})
+
+    def trace_flush(self, reset: bool = False):
+        '''
+        Flush all trace logs to info level or reset the debug queue.
+        If reset is True, it will empty the debug_queue without logging the messages.
+        '''
+        if reset:
+            self.trace_queue.clear()
+        else:
+            while self.trace_queue:
+                log_entry = self.trace_queue.pop(0)
+                self.log(log_entry["message"], "INFO", log_entry["request_id"])

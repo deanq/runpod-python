@@ -2,6 +2,7 @@
 
 import os
 import unittest
+from io import StringIO
 from unittest.mock import patch
 
 from runpod.serverless.modules import rp_logger
@@ -15,6 +16,7 @@ class TestLogger(unittest.TestCase):
         Set up the logger for each test
         '''
         self.logger = rp_logger.RunPodLogger()
+        self.logger.trace_flush(reset=True)  # Ensure the debug_queue is cleared before each test
 
     def test_default_log_level(self):
         '''
@@ -151,3 +153,33 @@ class TestLogger(unittest.TestCase):
             expected_log_output = f'INFO   | {job_id} | {truncated_message}'
 
             mock_print.assert_called_once_with(expected_log_output, flush=True)
+
+    def test_trace(self):
+        self.logger.trace("This is a trace message 1")
+        self.logger.trace("This is a trace message 2")
+        self.assertEqual(len(self.logger.trace_queue), 2)
+
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_trace_flush(self, mock_stdout):
+        self.logger.trace("This is a trace message 1")
+        self.logger.trace("This is a trace message 2")
+        self.logger.trace_flush()
+        self.assertIn("TRACE | This is a trace message 1", mock_stdout.getvalue())
+        self.assertIn("TRACE | This is a trace message 2", mock_stdout.getvalue())
+        self.assertEqual(len(self.logger.trace_queue), 0)
+
+    def test_trace_flush_with_reset(self):
+        self.logger.trace("This is a trace message 1")
+        self.logger.trace("This is a trace message 2")
+        self.logger.trace_flush(reset=True)
+        self.assertEqual(len(self.logger.trace_queue), 0)
+
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_error_with_trace_flush(self, mock_stdout):
+        self.logger.trace("This is a trace message 1")
+        self.logger.trace("This is a trace message 2")
+        self.logger.error("This is an error message with trace flush")
+        self.assertIn("TRACE | This is a trace message 1", mock_stdout.getvalue())
+        self.assertIn("TRACE | This is a trace message 2", mock_stdout.getvalue())
+        self.assertIn("ERROR  | This is an error message with trace flush", mock_stdout.getvalue())
+        self.assertEqual(len(self.logger.trace_queue), 0)
