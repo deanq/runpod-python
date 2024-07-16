@@ -48,7 +48,6 @@ class RunPodLogger:
         'RUNPOD_LOG_LEVEL',
         os.environ.get('RUNPOD_DEBUG_LEVEL', 'DEBUG'))
     )
-    trace_queue: List[Dict[str, str]] = []
 
     def __new__(cls):
         if RunPodLogger.__instance is None:
