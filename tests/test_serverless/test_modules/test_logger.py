@@ -16,7 +16,7 @@ class TestLogger(unittest.TestCase):
         Set up the logger for each test
         '''
         self.logger = rp_logger.RunPodLogger()
-        self.logger.trace_flush(reset=True)  # Ensure the debug_queue is cleared before each test
+        # self.logger.trace_flush(reset=True)  # Ensure the debug_queue is cleared before each test
 
     def test_default_log_level(self):
         '''
@@ -41,13 +41,16 @@ class TestLogger(unittest.TestCase):
         '''
         logger = rp_logger.RunPodLogger()
 
+        logger.set_level("TRACE")
+        self.assertEqual(logger.level, "TRACE")
+
         logger.set_level("INFO")
         self.assertEqual(logger.level, "INFO")
 
         logger.set_level("WARN")
         self.assertEqual(logger.level, "WARN")
 
-        logger.set_level(2)
+        logger.set_level(3)
         self.assertEqual(logger.level, "INFO")
 
     def test_call_log(self):
@@ -159,14 +162,16 @@ class TestLogger(unittest.TestCase):
         self.logger.trace("This is a trace message 2")
         self.assertEqual(len(self.logger.trace_queue), 2)
 
-    @patch('sys.stdout', new_callable=StringIO)
-    def test_trace_flush(self, mock_stdout):
-        self.logger.trace("This is a trace message 1")
-        self.logger.trace("This is a trace message 2")
-        self.logger.trace_flush()
-        self.assertIn("TRACE | This is a trace message 1", mock_stdout.getvalue())
-        self.assertIn("TRACE | This is a trace message 2", mock_stdout.getvalue())
-        self.assertEqual(len(self.logger.trace_queue), 0)
+    def test_trace_flush(self):
+        with patch("runpod.serverless.modules.rp_logger.RunPodLogger.log") as mock_log:
+            self.logger.trace("This is a trace message 1")
+            self.logger.trace("This is a trace message 2")
+            self.logger.trace_flush()
+
+            mock_log.assert_any_call("This is a trace message 1", "TRACE", None)
+            mock_log.assert_any_call("This is a trace message 2", "TRACE", None)
+
+            self.assertEqual(len(self.logger.trace_queue), 0)
 
     def test_trace_flush_with_reset(self):
         self.logger.trace("This is a trace message 1")
@@ -174,12 +179,14 @@ class TestLogger(unittest.TestCase):
         self.logger.trace_flush(reset=True)
         self.assertEqual(len(self.logger.trace_queue), 0)
 
-    @patch('sys.stdout', new_callable=StringIO)
-    def test_error_with_trace_flush(self, mock_stdout):
-        self.logger.trace("This is a trace message 1")
-        self.logger.trace("This is a trace message 2")
-        self.logger.error("This is an error message with trace flush")
-        self.assertIn("TRACE | This is a trace message 1", mock_stdout.getvalue())
-        self.assertIn("TRACE | This is a trace message 2", mock_stdout.getvalue())
-        self.assertIn("ERROR  | This is an error message with trace flush", mock_stdout.getvalue())
-        self.assertEqual(len(self.logger.trace_queue), 0)
+    def test_error_with_trace_flush(self):
+        with patch("runpod.serverless.modules.rp_logger.RunPodLogger.log") as mock_log:
+            self.logger.trace("This is a trace message 1")
+            self.logger.trace("This is a trace message 2")
+            self.logger.error("This is an error message with trace flush")
+
+            mock_log.assert_any_call("This is a trace message 1", "TRACE", None)
+            mock_log.assert_any_call("This is a trace message 2", "TRACE", None)
+            mock_log.assert_any_call("This is an error message with trace flush", "ERROR", None)
+
+            self.assertEqual(len(self.logger.trace_queue), 0)

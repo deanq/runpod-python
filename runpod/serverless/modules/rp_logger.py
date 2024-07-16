@@ -16,7 +16,7 @@ from typing import Optional, List, Dict
 
 
 MAX_MESSAGE_LENGTH = 4096
-LOG_LEVELS = ['NOTSET', 'DEBUG', 'INFO', 'WARN', 'ERROR']
+LOG_LEVELS = ['NOTSET', 'DEBUG', 'TRACE', 'INFO', 'WARN', 'ERROR']
 
 
 def _validate_log_level(log_level):
@@ -141,12 +141,11 @@ class RunPodLogger:
         '''
         trace log (buffered until flushed)
         '''
-        trace_message = f"TRACE | {message}"
-        self.trace_queue.append({"message": trace_message, "request_id": request_id})
+        self.trace_queue.append({"message": message, "request_id": request_id})
 
     def trace_flush(self, reset: bool = False):
         '''
-        Flush all trace logs to info level or reset the trace queue.
+        Flush all trace logs to TRACE level or reset the trace queue.
         If reset is True, it will empty the trace_queue without logging the messages.
         '''
         if reset:
@@ -154,4 +153,4 @@ class RunPodLogger:
         else:
             while self.trace_queue:
                 log_entry = self.trace_queue.pop(0)
-                self.log(log_entry["message"], "INFO", log_entry["request_id"])
+                self.log(log_entry["message"], "TRACE", log_entry["request_id"])
