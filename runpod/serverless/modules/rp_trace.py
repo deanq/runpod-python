@@ -2,6 +2,7 @@
 
 import os
 import asyncio
+import json
 from aiohttp import (
     TraceConfig,
     TraceRequestStartParams,
@@ -85,7 +86,7 @@ def report_trace(context, params, elapsed):
     if hasattr(params, 'response') and params.response:
         report["response_status"] = params.response.status
 
-    log.trace(report)
+    log.trace(json.dumps(report))
 
 
 def get_tracer() -> TraceConfig:

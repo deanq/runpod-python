@@ -1,4 +1,5 @@
 import unittest
+import json
 from unittest.mock import patch, MagicMock, Mock
 from aiohttp import TraceConfig
 import asyncio
@@ -149,7 +150,7 @@ class TestRPTrace(unittest.TestCase):
 
         report_trace(context, params, elapsed)
 
-        expected_report = {
+        expected_report = json.dumps({
             "trace_id": "test-trace-id",
             "method": "GET",
             "url": "http://example.com",
@@ -159,7 +160,7 @@ class TestRPTrace(unittest.TestCase):
             "payload_size_bytes": 1024,
             "response_size_bytes": 2048,
             "response_status": 200
-        }
+        })
 
         mock_log.trace.assert_called_once_with(expected_report)
 
@@ -180,14 +181,14 @@ class TestRPTrace(unittest.TestCase):
 
         report_trace(context, params, elapsed)
 
-        expected_report = {
+        expected_report = json.dumps({
             "trace_id": "test-trace-id",
             "method": "GET",
             "url": "http://example.com",
             "connect": 500.0,  # 0.5 seconds to milliseconds
             "transfer": 1000.0,  # 1.5 - 0.5 seconds to milliseconds
             "total": 1500.0,  # 1.5 seconds to milliseconds
-        }
+        })
 
         mock_log.trace.assert_called_once_with(expected_report)
 
@@ -209,7 +210,7 @@ class TestRPTrace(unittest.TestCase):
 
         report_trace(context, params, elapsed)
 
-        expected_report = {
+        expected_report = json.dumps({
             "trace_id": "test-trace-id",
             "method": "POST",
             "url": "http://example.com/resource",
@@ -217,6 +218,6 @@ class TestRPTrace(unittest.TestCase):
             "transfer": 1500.0,  # 2.0 - 0.5 seconds to milliseconds
             "total": 2000.0,  # 2.0 seconds to milliseconds
             "response_status": 404
-        }
+        })
 
         mock_log.trace.assert_called_once_with(expected_report)
