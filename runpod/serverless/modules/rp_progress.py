@@ -9,6 +9,7 @@ from typing import Dict, Any
 
 import aiohttp
 
+from runpod.user_agent import USER_AGENT
 from runpod.serverless.modules.rp_logger import RunPodLogger
 from .rp_http import send_result
 from .rp_trace import get_tracer
@@ -20,7 +21,10 @@ async def _create_session_async():
     """
     Creates an aiohttp session.
     """
-    auth_header = {"Authorization": f"{os.environ.get('RUNPOD_AI_API_KEY')}"}
+    auth_header = {
+        "Authorization": f"{os.environ.get('RUNPOD_AI_API_KEY')}",
+        "User-Agent": USER_AGENT
+    }
 
     return aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(limit=None),

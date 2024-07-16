@@ -96,7 +96,7 @@ async def run_worker(config: Dict[str, Any]) -> None:
     heartbeat.start_ping()
 
     client_session = aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(limit=0),
+        connector=aiohttp.TCPConnector(limit=None),
         headers=_get_auth_header(),
         timeout=aiohttp.ClientTimeout(600, ceil_threshold=400),
         trace_configs=[get_tracer()]
