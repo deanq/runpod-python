@@ -21,11 +21,11 @@ async def _create_session_async():
     Creates an aiohttp session.
     """
     auth_header = {"Authorization": f"{os.environ.get('RUNPOD_AI_API_KEY')}"}
-    timeout = aiohttp.ClientTimeout(total=300, connect=2, sock_connect=2)
 
     return aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(limit=None),
-        headers=auth_header, timeout=timeout,
+        headers=auth_header,
+        timeout=aiohttp.ClientTimeout(600, ceil_threshold=400),
         trace_configs=[get_tracer()]
     )
 
