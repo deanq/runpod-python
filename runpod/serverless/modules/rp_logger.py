@@ -32,7 +32,7 @@ def _validate_log_level(log_level):
         return log_level
 
     if isinstance(log_level, int):
-        if log_level < 0 or log_level > 4:
+        if log_level < 0 or log_level >= len(LOG_LEVELS):
             raise ValueError(f'Invalid debug level: {log_level}')
 
         return LOG_LEVELS[log_level]
