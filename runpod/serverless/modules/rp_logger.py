@@ -128,7 +128,6 @@ class RunPodLogger:
         '''
         error log
         '''
-        self.trace_flush()
         self.log(message, 'ERROR', request_id)
 
     def tip(self, message):
@@ -141,16 +140,4 @@ class RunPodLogger:
         '''
         trace log (buffered until flushed)
         '''
-        self.trace_queue.append({"message": message, "request_id": request_id})
-
-    def trace_flush(self, reset: bool = False):
-        '''
-        Flush all trace logs to TRACE level or reset the trace queue.
-        If reset is True, it will empty the trace_queue without logging the messages.
-        '''
-        if reset:
-            self.trace_queue.clear()
-        else:
-            while self.trace_queue:
-                log_entry = self.trace_queue.pop(0)
-                self.log(log_entry["message"], "TRACE", log_entry["request_id"])
+        self.log(message, 'TRACE')
