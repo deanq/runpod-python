@@ -151,7 +151,7 @@ class TestRPTrace(unittest.TestCase):
         report_trace(context, params, elapsed)
 
         expected_report = json.dumps({
-            "trace_id": "test-trace-id",
+            "traceId": "test-trace-id",
             "method": "GET",
             "url": "http://example.com",
             "connect": 500.0,  # 0.5 seconds to milliseconds
@@ -182,7 +182,7 @@ class TestRPTrace(unittest.TestCase):
         report_trace(context, params, elapsed)
 
         expected_report = json.dumps({
-            "trace_id": "test-trace-id",
+            "traceId": "test-trace-id",
             "method": "GET",
             "url": "http://example.com",
             "connect": 500.0,  # 0.5 seconds to milliseconds
@@ -211,7 +211,7 @@ class TestRPTrace(unittest.TestCase):
         report_trace(context, params, elapsed)
 
         expected_report = json.dumps({
-            "trace_id": "test-trace-id",
+            "traceId": "test-trace-id",
             "method": "POST",
             "url": "http://example.com/resource",
             "connect": 500.0,  # 0.5 seconds to milliseconds

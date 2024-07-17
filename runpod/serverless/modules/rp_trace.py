@@ -69,7 +69,7 @@ def report_trace(context, params, elapsed):
     transfer = elapsed - context.on_connection_made
 
     report = {
-        "trace_id": context.trace_id,
+        "traceId": context.trace_id,
         "method": params.method,
         "url": f"{params.url}",
         "connect": round(connect * 1000, 1),
