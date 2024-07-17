@@ -27,9 +27,7 @@ async def on_request_start(session, context, params: TraceRequestStartParams):
     context.response_size_bytes = 0
 
     if context.trace_request_ctx:
-        context.retries = context.trace_request_ctx.get("current_attempt")
-    else:
-        context.retries = 0
+        context.retries = context.trace_request_ctx.get("current_attempt", 0)
 
     log.debug(f"{context.trace_id} | on_request_start")
 

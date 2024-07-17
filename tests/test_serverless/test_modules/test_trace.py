@@ -139,6 +139,7 @@ class TestRPTrace(unittest.TestCase):
         context.on_connection_made = 0.5
         context.payload_size_bytes = 1024
         context.response_size_bytes = 2048
+        context.retries = 0
 
         params = Mock()
         params.method = "GET"
@@ -171,6 +172,7 @@ class TestRPTrace(unittest.TestCase):
         context.on_connection_made = 0.5
         context.payload_size_bytes = None
         context.response_size_bytes = None
+        context.retries = 0
 
         params = Mock()
         params.method = "GET"
@@ -199,6 +201,7 @@ class TestRPTrace(unittest.TestCase):
         context.on_connection_made = 0.5
         context.payload_size_bytes = None
         context.response_size_bytes = None
+        context.retries = 0
 
         params = Mock()
         params.method = "POST"
@@ -218,6 +221,38 @@ class TestRPTrace(unittest.TestCase):
             "transfer": 1500.0,  # 2.0 - 0.5 seconds to milliseconds
             "total": 2000.0,  # 2.0 seconds to milliseconds
             "response_status": 404
+        })
+
+        mock_log.trace.assert_called_once_with(expected_report)
+
+    @patch('runpod.serverless.modules.rp_trace.log')
+    def test_report_trace_with_retries(self, mock_log):
+        context = Mock()
+        context.trace_id = "test-trace-id"
+        context.on_connection_made = 0.5
+        context.payload_size_bytes = None
+        context.response_size_bytes = None
+        context.retries = 1
+
+        params = Mock()
+        params.method = "POST"
+        params.url = "http://example.com/resource"
+        params.response = Mock()
+        params.response.status = 404
+
+        elapsed = 2.0
+
+        report_trace(context, params, elapsed)
+
+        expected_report = json.dumps({
+            "traceId": "test-trace-id",
+            "method": "POST",
+            "url": "http://example.com/resource",
+            "connect": 500.0,  # 0.5 seconds to milliseconds
+            "transfer": 1500.0,  # 2.0 - 0.5 seconds to milliseconds
+            "total": 2000.0,  # 2.0 seconds to milliseconds
+            "retries": 1,
+            "response_status": 404,
         })
 
         mock_log.trace.assert_called_once_with(expected_report)
