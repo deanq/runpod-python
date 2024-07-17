@@ -25,6 +25,12 @@ async def on_request_start(session, context, params: TraceRequestStartParams):
     context.on_request_start = asyncio.get_event_loop().time()
     context.payload_size_bytes = 0
     context.response_size_bytes = 0
+
+    if context.trace_request_ctx:
+        context.retries = context.trace_request_ctx.get("current_attempt")
+    else:
+        context.retries = 0
+
     log.debug(f"{context.trace_id} | on_request_start")
 
 
@@ -83,10 +89,11 @@ def report_trace(context, params, elapsed):
     if context.response_size_bytes:
         report["response_size_bytes"] = context.response_size_bytes
 
+    if context.retries:
+        report["retries"] = context.retries
+
     if hasattr(params, 'response') and params.response:
         report["response_status"] = params.response.status
-
-    report["context"] = str(context)
 
     log.trace(json.dumps(report))
 
