@@ -86,7 +86,7 @@ def report_trace(context, params, elapsed):
     if hasattr(params, 'response') and params.response:
         report["response_status"] = params.response.status
 
-    report["context"] = context
+    report["context"] = str(context)
 
     log.trace(json.dumps(report))
 
