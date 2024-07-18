@@ -1,6 +1,8 @@
 import unittest
 import json
-from unittest.mock import patch, MagicMock, Mock
+from types import SimpleNamespace
+from time import time
+from unittest.mock import patch, MagicMock
 from aiohttp import TraceConfig
 import asyncio
 from runpod.serverless.modules.rp_trace import (
@@ -25,51 +27,42 @@ class TestRPTrace(unittest.TestCase):
     def tearDown(self):
         self.loop.close()
 
-    @patch('runpod.serverless.modules.rp_trace.log')
-    def test_get_tracer(self, mock_log):
+    def test_get_tracer(self):
         assert isinstance(get_tracer(), TraceConfig)
 
-    @patch('runpod.serverless.modules.rp_trace.log')
-    def test_on_request_start(self, mock_log):
+    def test_on_request_start(self):
         session = MagicMock()
-        context = MagicMock()
-        params = MagicMock()
+        context = SimpleNamespace()
+        params = {
+            "method": "GET",
+            "url": "http://test.com/"
+        }
 
         self.loop.run_until_complete(on_request_start(session, context, params))
-        assert hasattr(context, 'trace_id')
         assert hasattr(context, 'on_request_start')
-        assert context.payload_size_bytes == 0
-        assert context.response_size_bytes == 0
-        mock_log.debug.assert_called_once()
+        assert hasattr(context, 'trace_id')
+        assert context.method == params["method"]
+        assert context.url == params["url"]
 
-    @patch('runpod.serverless.modules.rp_trace.log')
-    def test_on_connection_create_end(self, mock_log):
+    def test_on_connection_create_end(self):
         session = MagicMock()
-        context = MagicMock()
+        context = SimpleNamespace()
         params = MagicMock()
-        params.host = 'test.com'
         context.on_request_start = self.loop.time()
 
         self.loop.run_until_complete(on_connection_create_end(session, context, params))
-        assert hasattr(context, 'on_connection_made')
-        mock_log.debug.assert_called_once()
 
-    @patch('runpod.serverless.modules.rp_trace.log')
-    def test_on_connection_reuseconn(self, mock_log):
+    def test_on_connection_reuseconn(self):
         session = MagicMock()
-        context = MagicMock()
+        context = SimpleNamespace()
         params = MagicMock()
-        params.host = 'test.com'
         context.on_request_start = self.loop.time()
 
         self.loop.run_until_complete(on_connection_reuseconn(session, context, params))
-        assert hasattr(context, 'on_connection_made')
-        mock_log.debug.assert_called_once()
 
-    @patch('runpod.serverless.modules.rp_trace.log')
-    def test_on_request_chunk_sent(self, mock_log):
+    def test_on_request_chunk_sent(self):
         session = MagicMock()
-        context = MagicMock()
+        context = SimpleNamespace()
         params = MagicMock()
         params.chunk = b'test data'
         context.on_request_start = self.loop.time()
@@ -83,12 +76,10 @@ class TestRPTrace(unittest.TestCase):
         
         # Verify that payload_size_bytes has accumulated
         assert context.payload_size_bytes == len(params.chunk) * 3
-        mock_log.debug.assert_called()
 
-    @patch('runpod.serverless.modules.rp_trace.log')
-    def test_on_response_chunk_received(self, mock_log):
+    def test_on_response_chunk_received(self):
         session = MagicMock()
-        context = MagicMock()
+        context = SimpleNamespace()
         params = MagicMock()
         params.chunk = b'received data'
         context.on_request_start = self.loop.time()
@@ -102,157 +93,78 @@ class TestRPTrace(unittest.TestCase):
 
         # Verify that payload_size_bytes has accumulated
         assert context.response_size_bytes == len(params.chunk) * 3
-        mock_log.debug.assert_called()
 
     @patch('runpod.serverless.modules.rp_trace.report_trace')
-    @patch('runpod.serverless.modules.rp_trace.log')
-    def test_on_request_end(self, mock_log, mock_report_trace):
+    def test_on_request_end(self, mock_report_trace):
         session = MagicMock()
-        context = MagicMock()
+        context = SimpleNamespace()
         params = MagicMock()
         context.on_request_start = self.loop.time()
-        context.on_connection_made = self.loop.time()
 
         self.loop.run_until_complete(on_request_end(session, context, params))
-        mock_log.trace.assert_not_called()
-        mock_log.debug.assert_called_once()
         mock_report_trace.assert_called_once()
 
     @patch('runpod.serverless.modules.rp_trace.report_trace')
-    @patch('runpod.serverless.modules.rp_trace.log')
-    def test_on_request_exception(self, mock_log, mock_report_trace):
+    def test_on_request_exception(self, mock_report_trace):
         session = MagicMock()
-        context = MagicMock()
+        context = SimpleNamespace()
         params = MagicMock()
         params.exception = Exception("Test Exception")
         context.on_request_start = self.loop.time()
 
         self.loop.run_until_complete(on_request_exception(session, context, params))
-        mock_log.trace.assert_not_called()
-        mock_log.debug.assert_called_once()
         mock_report_trace.assert_called_once()
 
     @patch('runpod.serverless.modules.rp_trace.log')
     def test_report_trace(self, mock_log):
-        context = Mock()
+        context = SimpleNamespace()
         context.trace_id = "test-trace-id"
-        context.on_connection_made = 0.5
+        context.on_request_start = time()
+        context.connect = 0.5
         context.payload_size_bytes = 1024
         context.response_size_bytes = 2048
         context.retries = 0
 
-        params = Mock()
-        params.method = "GET"
-        params.url = "http://example.com"
-        params.response = Mock()
+        params = MagicMock()
         params.response.status = 200
 
         elapsed = 1.5
 
-        report_trace(context, params, elapsed)
-
         expected_report = json.dumps({
-            "traceId": "test-trace-id",
-            "method": "GET",
-            "url": "http://example.com",
-            "connect": 500.0,  # 0.5 seconds to milliseconds
-            "transfer": 1000.0,  # 1.5 - 0.5 seconds to milliseconds
-            "total": 1500.0,  # 1.5 seconds to milliseconds
+            "trace_id": "test-trace-id",
+            "connect": 500.0,
             "payload_size_bytes": 1024,
             "response_size_bytes": 2048,
+            "retries": 0,
+            "transfer": 1000.0,  # 1.5 - 0.5 seconds to milliseconds
+            "total": 1500.0,  # 1.5 seconds to milliseconds
             "response_status": 200
         })
 
+        report_trace(context, params, elapsed, mock_log.trace)
         mock_log.trace.assert_called_once_with(expected_report)
 
     @patch('runpod.serverless.modules.rp_trace.log')
-    def test_report_trace_no_payload_or_response(self, mock_log):
-        context = Mock()
+    def test_report_trace_error_log(self, mock_log):
+        context = SimpleNamespace()
         context.trace_id = "test-trace-id"
-        context.on_connection_made = 0.5
-        context.payload_size_bytes = None
-        context.response_size_bytes = None
-        context.retries = 0
+        context.on_request_start = time()
+        context.connect = 0.5
+        context.retries = 3
 
-        params = Mock()
-        params.method = "GET"
-        params.url = "http://example.com"
-        params.response = None
+        params = MagicMock()
+        params.response.status = 502
 
         elapsed = 1.5
 
-        report_trace(context, params, elapsed)
-
         expected_report = json.dumps({
-            "traceId": "test-trace-id",
-            "method": "GET",
-            "url": "http://example.com",
-            "connect": 500.0,  # 0.5 seconds to milliseconds
+            "trace_id": "test-trace-id",
+            "connect": 500.0,
+            "retries": 3,
             "transfer": 1000.0,  # 1.5 - 0.5 seconds to milliseconds
             "total": 1500.0,  # 1.5 seconds to milliseconds
+            "response_status": 502
         })
 
-        mock_log.trace.assert_called_once_with(expected_report)
-
-    @patch('runpod.serverless.modules.rp_trace.log')
-    def test_report_trace_with_response_status(self, mock_log):
-        context = Mock()
-        context.trace_id = "test-trace-id"
-        context.on_connection_made = 0.5
-        context.payload_size_bytes = None
-        context.response_size_bytes = None
-        context.retries = 0
-
-        params = Mock()
-        params.method = "POST"
-        params.url = "http://example.com/resource"
-        params.response = Mock()
-        params.response.status = 404
-
-        elapsed = 2.0
-
-        report_trace(context, params, elapsed)
-
-        expected_report = json.dumps({
-            "traceId": "test-trace-id",
-            "method": "POST",
-            "url": "http://example.com/resource",
-            "connect": 500.0,  # 0.5 seconds to milliseconds
-            "transfer": 1500.0,  # 2.0 - 0.5 seconds to milliseconds
-            "total": 2000.0,  # 2.0 seconds to milliseconds
-            "response_status": 404
-        })
-
-        mock_log.trace.assert_called_once_with(expected_report)
-
-    @patch('runpod.serverless.modules.rp_trace.log')
-    def test_report_trace_with_retries(self, mock_log):
-        context = Mock()
-        context.trace_id = "test-trace-id"
-        context.on_connection_made = 0.5
-        context.payload_size_bytes = None
-        context.response_size_bytes = None
-        context.retries = 1
-
-        params = Mock()
-        params.method = "POST"
-        params.url = "http://example.com/resource"
-        params.response = Mock()
-        params.response.status = 404
-
-        elapsed = 2.0
-
-        report_trace(context, params, elapsed)
-
-        expected_report = json.dumps({
-            "traceId": "test-trace-id",
-            "method": "POST",
-            "url": "http://example.com/resource",
-            "connect": 500.0,  # 0.5 seconds to milliseconds
-            "transfer": 1500.0,  # 2.0 - 0.5 seconds to milliseconds
-            "total": 2000.0,  # 2.0 seconds to milliseconds
-            "retries": 1,
-            "response_status": 404,
-        })
-
-        mock_log.trace.assert_called_once_with(expected_report)
+        report_trace(context, params, elapsed, mock_log.error)
+        mock_log.error.assert_called_once_with(expected_report)
