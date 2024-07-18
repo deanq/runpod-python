@@ -26,6 +26,7 @@ async def on_request_start(session, context, params: TraceRequestStartParams):
     context.method = params.method
     context.url = params.url
 
+    log.trace(f"on_request_start | context: {context} | context.trace_request_ctx: {context.trace_request_ctx}")
     log.trace(f"on_request_start | headers: {params.headers}")
 
     if hasattr(context, "trace_request_ctx"):
