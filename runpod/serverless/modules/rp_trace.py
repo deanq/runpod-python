@@ -23,10 +23,10 @@ log = RunPodLogger()
 async def on_request_start(session, context, params: TraceRequestStartParams):
     context.on_request_start = asyncio.get_event_loop().time()
     context.trace_id = str(uuid4())
-    context.method = params.get("method")
-    context.url = params.get("url")
+    context.method = params.method
+    context.url = params.url
 
-    log.trace(f"on_request_start | headers: {params.get('headers')}")
+    log.trace(f"on_request_start | headers: {params.headers}")
 
     if hasattr(context, "trace_request_ctx"):
         context.retries = context.trace_request_ctx.get("current_attempt", 0)

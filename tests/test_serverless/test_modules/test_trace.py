@@ -3,7 +3,16 @@ import json
 from types import SimpleNamespace
 from time import time
 from unittest.mock import patch, MagicMock
-from aiohttp import TraceConfig
+from aiohttp import (
+    TraceConfig,
+    TraceRequestStartParams,
+    TraceConnectionCreateEndParams,
+    TraceConnectionReuseconnParams,
+    TraceRequestEndParams,
+    TraceRequestExceptionParams,
+    TraceRequestChunkSentParams,
+    TraceResponseChunkReceivedParams,
+)
 import asyncio
 from runpod.serverless.modules.rp_trace import (
     on_request_start,
@@ -33,16 +42,13 @@ class TestRPTrace(unittest.TestCase):
     def test_on_request_start(self):
         session = MagicMock()
         context = SimpleNamespace()
-        params = {
-            "method": "GET",
-            "url": "http://test.com/"
-        }
+        params = TraceRequestStartParams("GET", "http://test.com/", { "x-request-id": "myRequestId" })
 
         self.loop.run_until_complete(on_request_start(session, context, params))
         assert hasattr(context, 'on_request_start')
         assert hasattr(context, 'trace_id')
-        assert context.method == params["method"]
-        assert context.url == params["url"]
+        assert context.method == params.method
+        assert context.url == params.url
 
     def test_on_connection_create_end(self):
         session = MagicMock()
