@@ -8,7 +8,6 @@ from aiohttp import (
     TraceRequestStartParams,
     TraceConnectionCreateEndParams,
     TraceConnectionReuseconnParams,
-    TraceRequestEndParams,
     TraceRequestExceptionParams,
     TraceRequestChunkSentParams,
     TraceResponseChunkReceivedParams,
@@ -52,26 +51,22 @@ class TestRPTrace(unittest.TestCase):
 
     def test_on_connection_create_end(self):
         session = MagicMock()
-        context = SimpleNamespace()
-        params = MagicMock()
-        context.on_request_start = self.loop.time()
+        context = SimpleNamespace(on_request_start=self.loop.time())
+        params = TraceConnectionCreateEndParams()
 
         self.loop.run_until_complete(on_connection_create_end(session, context, params))
 
     def test_on_connection_reuseconn(self):
         session = MagicMock()
-        context = SimpleNamespace()
-        params = MagicMock()
-        context.on_request_start = self.loop.time()
+        context = SimpleNamespace(on_request_start=self.loop.time())
+        params = TraceConnectionReuseconnParams()
 
         self.loop.run_until_complete(on_connection_reuseconn(session, context, params))
 
     def test_on_request_chunk_sent(self):
         session = MagicMock()
-        context = SimpleNamespace()
-        params = MagicMock()
-        params.chunk = b'test data'
-        context.on_request_start = self.loop.time()
+        context = SimpleNamespace(on_request_start=self.loop.time())
+        params = TraceRequestChunkSentParams("GET", "http://test.com/", chunk=b'test data')
 
         # Initial call to on_request_start to initialize context
         self.loop.run_until_complete(on_request_start(session, context, params))
@@ -85,10 +80,8 @@ class TestRPTrace(unittest.TestCase):
 
     def test_on_response_chunk_received(self):
         session = MagicMock()
-        context = SimpleNamespace()
-        params = MagicMock()
-        params.chunk = b'received data'
-        context.on_request_start = self.loop.time()
+        context = SimpleNamespace(on_request_start=self.loop.time())
+        params = TraceResponseChunkReceivedParams("GET", "http://test.com/", chunk=b'received data')
 
         # Initial call to on_request_start to initialize context
         self.loop.run_until_complete(on_request_start(session, context, params))
@@ -103,9 +96,8 @@ class TestRPTrace(unittest.TestCase):
     @patch('runpod.serverless.modules.rp_trace.report_trace')
     def test_on_request_end(self, mock_report_trace):
         session = MagicMock()
-        context = SimpleNamespace()
+        context = SimpleNamespace(on_request_start=self.loop.time())
         params = MagicMock()
-        context.on_request_start = self.loop.time()
 
         self.loop.run_until_complete(on_request_end(session, context, params))
         mock_report_trace.assert_called_once()
@@ -113,10 +105,8 @@ class TestRPTrace(unittest.TestCase):
     @patch('runpod.serverless.modules.rp_trace.report_trace')
     def test_on_request_exception(self, mock_report_trace):
         session = MagicMock()
-        context = SimpleNamespace()
-        params = MagicMock()
-        params.exception = Exception("Test Exception")
-        context.on_request_start = self.loop.time()
+        context = SimpleNamespace(on_request_start=self.loop.time())
+        params = TraceRequestExceptionParams("GET", "http://test.com/", headers={}, exception=Exception("Test Exception"))
 
         self.loop.run_until_complete(on_request_exception(session, context, params))
         mock_report_trace.assert_called_once()

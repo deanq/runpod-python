@@ -26,11 +26,14 @@ async def on_request_start(session, context, params: TraceRequestStartParams):
     context.method = params.method
     context.url = params.url
 
-    log.trace(f"on_request_start | context: {context} | context.trace_request_ctx: {context.trace_request_ctx}")
-    log.trace(f"on_request_start | headers: {params.headers}")
+    log.trace(f"on_request_start | context: {context}")
 
-    if hasattr(context, "trace_request_ctx"):
-        context.retries = context.trace_request_ctx.get("current_attempt", 0)
+    if hasattr(params, "headers") and params.headers:
+        log.trace(f"on_request_start | headers: {params.headers}")
+
+    if hasattr(context, "trace_request_ctx") and context.trace_request_ctx:
+        log.trace(f"on_request_start| context.trace_request_ctx: {context.trace_request_ctx}")
+        context.retries = context.trace_request_ctx["current_attempt"]
 
 
 async def on_connection_create_end(session, context, params: TraceConnectionCreateEndParams):
