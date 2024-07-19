@@ -111,6 +111,7 @@ class TestRPTrace(unittest.TestCase):
 
         self.loop.run_until_complete(on_request_exception(session, context, params))
         mock_report_trace.assert_called_once()
+        assert context.exception
 
     @patch('runpod.serverless.modules.rp_trace.log')
     def test_report_trace(self, mock_log):
@@ -148,6 +149,7 @@ class TestRPTrace(unittest.TestCase):
         context.on_request_start = time()
         context.connect = 0.5
         context.retries = 3
+        context.exception = str(Exception("Test Exception"))
 
         params = MagicMock()
         params.response.status = 502
@@ -158,6 +160,7 @@ class TestRPTrace(unittest.TestCase):
             "trace_id": "test-trace-id",
             "connect": 500.0,
             "retries": 3,
+            "exception": "Test Exception",
             "transfer": 1000.0,  # 1.5 - 0.5 seconds to milliseconds
             "total": 1500.0,  # 1.5 seconds to milliseconds
             "response_status": 502

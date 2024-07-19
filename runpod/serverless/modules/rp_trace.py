@@ -65,6 +65,7 @@ async def on_request_end(session, context, params: TraceRequestEndParams):
 
 
 async def on_request_exception(session, context, params: TraceRequestExceptionParams):
+    context.exception = str(params.exception)
     elapsed = asyncio.get_event_loop().time() - context.on_request_start
     # log to error level
     report_trace(context, params, elapsed, log.error)
