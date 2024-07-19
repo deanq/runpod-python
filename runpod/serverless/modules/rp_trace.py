@@ -75,7 +75,10 @@ def report_trace(context: types.SimpleNamespace, params, elapsed, logger=log.tra
     context.transfer = round((elapsed - context.connect) * 1000, 1)
     context.connect = round(context.connect * 1000, 1)
     context.total = round(elapsed * 1000, 1)
-    delattr(context, 'on_request_start')
+
+    if context.on_request_start:
+        # exclude from report
+        delattr(context, 'on_request_start')
 
     if hasattr(params, 'response') and params.response:
         context.response_status = params.response.status
