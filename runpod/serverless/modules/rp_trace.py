@@ -24,7 +24,7 @@ async def on_request_start(session, context, params: TraceRequestStartParams):
     context.on_request_start = asyncio.get_event_loop().time()
     context.trace_id = str(uuid4())
     context.method = params.method
-    context.url = params.url
+    context.url = params.url.human_repr()
 
     log.trace(f"on_request_start | context: {context}")
 
@@ -65,14 +65,9 @@ async def on_request_end(session, context, params: TraceRequestEndParams):
 
 
 async def on_request_exception(session, context, params: TraceRequestExceptionParams):
-    log.error({
-        "session": f"{session}",
-        "context": f"{context}",
-        "params": f"{params}",
-    })
-    # elapsed = asyncio.get_event_loop().time() - context.on_request_start
+    elapsed = asyncio.get_event_loop().time() - context.on_request_start
     # log to error level
-    # report_trace(context, params, elapsed, log.error)
+    report_trace(context, params, elapsed, log.error)
 
 
 def report_trace(context: types.SimpleNamespace, params, elapsed, logger=log.trace):
