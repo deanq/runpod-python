@@ -32,7 +32,6 @@ async def on_request_start(session, context, params: TraceRequestStartParams):
         log.trace(f"on_request_start | headers: {params.headers}")
 
     if hasattr(context, "trace_request_ctx") and context.trace_request_ctx:
-        log.trace(f"on_request_start| context.trace_request_ctx: {context.trace_request_ctx}")
         context.retries = context.trace_request_ctx["current_attempt"]
 
 
