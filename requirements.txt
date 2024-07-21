@@ -1,15 +1,13 @@
 aiohttp[speedups] >= 3.9.5
 aiohttp-retry >= 2.8.3
 
-opentelemetry-api
-opentelemetry-sdk
-opentelemetry-instrumentation-aiohttp-client
 
 backoff >= 2.2.1
 boto3 >= 1.26.165
 click >= 8.1.7
 colorama >= 0.2.5, < 0.4.7
 fastapi[all] >= 0.94.0
+opentelemetry-instrumentation-aiohttp-client
 paramiko >= 3.3.1
 prettytable >= 3.9.0
 py-cpuinfo >= 9.0.0
