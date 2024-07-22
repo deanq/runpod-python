@@ -6,6 +6,7 @@ import time
 import requests
 from requests.adapters import HTTPAdapter, Retry
 
+from runpod.http_client import SyncClientSession
 from runpod.endpoint.helpers import (
     FINAL_STATES, UNAUTHORIZED_MSG, API_KEY_NOT_SET_MSG, is_completed
 )
@@ -29,7 +30,7 @@ class RunPodClient:
         if api_key is None:
             raise RuntimeError(API_KEY_NOT_SET_MSG)
 
-        self.rp_session = requests.Session()
+        self.rp_session = SyncClientSession()
         retries = Retry(total=5, backoff_factor=1, status_forcelist=[408, 429])
         self.rp_session.mount('http://', HTTPAdapter(max_retries=retries))
 
