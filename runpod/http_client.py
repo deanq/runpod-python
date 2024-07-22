@@ -1,6 +1,9 @@
 import aiohttp
 import requests
-from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor, create_trace_config
+from opentelemetry.instrumentation.aiohttp_client import (
+    AioHttpClientInstrumentor,
+    create_trace_config,
+)
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from .observability import trace
 
@@ -18,7 +21,6 @@ class AsyncClientSession(aiohttp.ClientSession):
 
     def get_tracer(self):
         return self.tracer
-
 
 
 class SyncClientSession(requests.Session):
