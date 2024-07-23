@@ -6,12 +6,18 @@ from .tracer import (
     get_request_tracer,
 )
 from .user_agent import USER_AGENT
+from .cli.groups.config.functions import get_credentials
 
 
 def get_auth_header():
+    if credentials := get_credentials():
+        auth = credentials.get("api_key")
+    else:
+        auth = os.environ.get('RUNPOD_AI_API_KEY')
+
     return {
         "Content-Type": "application/json",
-        "Authorization": f"{os.environ.get('RUNPOD_AI_API_KEY')}",
+        "Authorization": f"{auth}",
         "User-Agent": USER_AGENT,
     }
 
@@ -19,7 +25,7 @@ def get_auth_header():
 class AsyncClientSession(aiohttp.ClientSession):
     def __init__(self, *args, **kwargs):
         super().__init__(
-            connector=aiohttp.TCPConnector(limit=None),
+            connector=aiohttp.TCPConnector(limit=0),
             headers=get_auth_header(),
             timeout=aiohttp.ClientTimeout(600, ceil_threshold=400),
             trace_configs=[get_aiohttp_tracer()],

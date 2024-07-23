@@ -4,6 +4,7 @@ RunPod | Python | Endpoint Runner
 from typing import Any, Optional, Dict
 import time
 from requests.adapters import HTTPAdapter, Retry
+from requests.structures import CaseInsensitiveDict
 
 from runpod.http_client import SyncClientSession
 from runpod.endpoint.helpers import (
@@ -33,10 +34,10 @@ class RunPodClient:
         retries = Retry(total=5, backoff_factor=1, status_forcelist=[408, 429])
         self.rp_session.mount('http://', HTTPAdapter(max_retries=retries))
 
-        self.headers = {
+        self.headers = CaseInsensitiveDict({
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
-        }
+        })
 
         self.endpoint_url_base = endpoint_url_base
 
@@ -95,7 +96,7 @@ class Job:
         self.endpoint_id = endpoint_id
         self.job_id = job_id
         self.rp_client = client
-
+        self.rp_client.headers.update({"X-Request-ID": job_id})
         self.job_status = None
         self.job_output = None
 
