@@ -88,14 +88,13 @@ async def on_request_exception(session, context, params: TraceRequestExceptionPa
 def report_trace(context: types.SimpleNamespace, params, elapsed, logger=log.trace):
     context.total = round(elapsed * 1000, 1)
 
-    if not hasattr(context, 'transfer'):
+    if not hasattr(context, 'transfer') and hasattr(context, 'connect'):
         context.transfer = round((elapsed - context.connect) * 1000, 1)
 
-    if context.connect:
+    if hasattr(context, 'connect') and context.connect:
         context.connect = round(context.connect * 1000, 1)
 
-    if context.on_request_start:
-        # exclude from report
+    if hasattr(context, 'on_request_start'):
         delattr(context, 'on_request_start')
 
     if hasattr(params, 'response') and params.response:
@@ -122,14 +121,15 @@ def get_aiohttp_tracer() -> TraceConfig:
 
 
 class TraceRequest:
-    context = types.SimpleNamespace()
-
     def __init__(self):
+        self.context = types.SimpleNamespace()
         self.request: PreparedRequest = None
         self.response: Response = None
+        self.connection_start_time = None
+        self.transfer_start_time = None
 
     def __enter__(self):
-        self.context.on_request_start = time()
+        self.connection_start_time = time()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -142,21 +142,19 @@ class TraceRequest:
                 self.context.payload_size_bytes = len(self.request.body)
 
         if self.response is not None:
-            duration = time() - self.context.on_request_start
+            self.transfer_start_time = time()
+            duration = self.transfer_start_time - self.connection_start_time
             self.context.transfer = self.response.elapsed.total_seconds()
             self.context.connect = duration - self.context.transfer
 
             self.context.response_status = self.response.status_code
             self.context.response_size_bytes = len(self.response.content)
 
-            print(self.response.raw.retries)
             if hasattr(self.response.raw, "retries"):
                 self.context.retries = self.response.raw.retries.total
 
-            if self.response.ok:
-                report_trace(self.context, {}, duration)
-            else:
-                report_trace(self.context, {}, duration, log.error)
+            logger = log.trace if self.response.ok else log.error
+            report_trace(self.context, {}, duration, logger)
 
 
 def get_request_tracer():
