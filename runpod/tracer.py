@@ -13,7 +13,7 @@ from aiohttp import (
     TraceRequestChunkSentParams,
     TraceResponseChunkReceivedParams,
 )
-from functools import wraps
+from requests import Response, PreparedRequest
 from time import time
 from uuid import uuid4
 
@@ -116,3 +116,48 @@ def get_aiohttp_tracer() -> TraceConfig:
     trace_config.on_request_exception.append(on_request_exception)
 
     return trace_config
+
+
+# Tracer for requests
+
+
+class TraceRequest:
+    context = types.SimpleNamespace()
+
+    def __init__(self):
+        self.request: PreparedRequest = None
+        self.response: Response = None
+
+    def __enter__(self):
+        self.context.on_request_start = time()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.request is not None:
+            self.context = headers_to_context(self.context, self.request.headers)
+            self.context.method = self.request.method
+            self.context.url = self.request.url
+
+            if isinstance(self.request.body, bytes):
+                self.context.payload_size_bytes = len(self.request.body)
+
+        if self.response is not None:
+            duration = time() - self.context.on_request_start
+            self.context.transfer = self.response.elapsed.total_seconds()
+            self.context.connect = duration - self.context.transfer
+
+            self.context.response_status = self.response.status_code
+            self.context.response_size_bytes = len(self.response.content)
+
+            print(self.response.raw.retries)
+            if hasattr(self.response.raw, "retries"):
+                self.context.retries = self.response.raw.retries.total
+
+            if self.response.ok:
+                report_trace(self.context, {}, duration)
+            else:
+                report_trace(self.context, {}, duration, log.error)
+
+
+def get_request_tracer():
+    return TraceRequest()
