@@ -20,7 +20,7 @@ log = RunPodLogger()
 job_list = Jobs()
 
 
-async def _transmit(client_session, url, job_data):
+async def _transmit(client_session: aiohttp.ClientSession, url, job_data):
     """
     Wrapper for transmitting results via POST.
     """
@@ -29,7 +29,7 @@ async def _transmit(client_session, url, job_data):
 
     kwargs = {
         "data": job_data,
-        "headers": {"charset": "utf-8", "Content-Type": "application/x-www-form-urlencoded"},
+        "headers": {"charset": "utf-8", "Content-Type": "application/x-www-form-urlencoded", "x-request-id": job_data["id"]},
         "raise_for_status": True
     }
 
