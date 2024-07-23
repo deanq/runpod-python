@@ -5,9 +5,7 @@ from typing import Any, Optional, Dict
 import time
 import requests
 from requests.adapters import HTTPAdapter, Retry
-from requests.structures import CaseInsensitiveDict
 
-from runpod.http_client import SyncClientSession
 from runpod.endpoint.helpers import (
     FINAL_STATES, UNAUTHORIZED_MSG, API_KEY_NOT_SET_MSG, is_completed
 )
@@ -31,14 +29,14 @@ class RunPodClient:
         if api_key is None:
             raise RuntimeError(API_KEY_NOT_SET_MSG)
 
-        self.rp_session = SyncClientSession()
+        self.rp_session = requests.Session()
         retries = Retry(total=5, backoff_factor=1, status_forcelist=[408, 429])
         self.rp_session.mount('http://', HTTPAdapter(max_retries=retries))
 
-        self.headers = CaseInsensitiveDict({
+        self.headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
-        })
+        }
 
         self.endpoint_url_base = endpoint_url_base
 
@@ -97,7 +95,7 @@ class Job:
         self.endpoint_id = endpoint_id
         self.job_id = job_id
         self.rp_client = client
-        self.rp_client.headers.update({"X-Request-ID": job_id})
+
         self.job_status = None
         self.job_output = None
 
