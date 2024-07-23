@@ -53,13 +53,11 @@ async def on_request_start(session, context, params: TraceRequestStartParams):
 
 
 async def on_connection_create_end(session, context, params: TraceConnectionCreateEndParams):
-    elapsed = asyncio.get_event_loop().time() - context.on_request_start
-    context.connect = round(elapsed * 1000, 1)
+    context.connect = asyncio.get_event_loop().time() - context.on_request_start
 
 
 async def on_connection_reuseconn(session, context, params: TraceConnectionReuseconnParams):
-    elapsed = asyncio.get_event_loop().time() - context.on_request_start
-    context.connect = round(elapsed * 1000, 1)
+    context.connect = asyncio.get_event_loop().time() - context.on_request_start
 
 
 async def on_request_chunk_sent(session, context, params: TraceRequestChunkSentParams):
@@ -90,8 +88,8 @@ async def on_request_exception(session, context, params: TraceRequestExceptionPa
 def report_trace(context: types.SimpleNamespace, params, elapsed, logger=log.trace):
     context.total = round(elapsed * 1000, 1)
 
-    if not hasattr(context, 'transfer') and hasattr(context, 'connect'):
-        context.transfer = round((elapsed - context.connect) * 1000, 1)
+    if hasattr(context, 'transfer') and context.transfer:
+        context.transfer = round(context.transfer * 1000, 1)
 
     if hasattr(context, 'connect') and context.connect:
         context.connect = round(context.connect * 1000, 1)
@@ -130,11 +128,10 @@ class TraceRequest:
         self.context = types.SimpleNamespace()
         self.request: PreparedRequest = None
         self.response: Response = None
-        self.connection_start_time = None
-        self.transfer_start_time = None
+        self.request_start = None
 
     def __enter__(self):
-        self.connection_start_time = time()
+        self.request_start = time()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -148,10 +145,9 @@ class TraceRequest:
                 self.context.payload_size_bytes = len(self.request.body)
 
         if self.response is not None:
-            self.transfer_start_time = time()
-            duration = self.transfer_start_time - self.connection_start_time
+            request_end = time() - self.request_start
             self.context.transfer = self.response.elapsed.total_seconds()
-            self.context.connect = duration - self.context.transfer
+            self.context.connect = request_end - self.context.transfer
 
             self.context.response_status = self.response.status_code
             self.context.response_size_bytes = len(self.response.content)
@@ -160,7 +156,7 @@ class TraceRequest:
                 self.context.retries = self.response.raw.retries.total
 
             logger = log.trace if self.response.ok else log.error
-            report_trace(self.context, {}, duration, logger)
+            report_trace(self.context, {}, request_end, logger)
 
 
 def get_request_tracer():
