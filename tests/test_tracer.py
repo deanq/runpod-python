@@ -10,7 +10,7 @@ from aiohttp import (
     TraceRequestChunkSentParams,
     TraceResponseChunkReceivedParams,
 )
-from runpod.serverless.modules.rp_trace import (
+from runpod.tracer import (
     on_request_start,
     on_connection_create_end,
     on_connection_reuseconn,
@@ -19,7 +19,7 @@ from runpod.serverless.modules.rp_trace import (
     on_request_end,
     on_request_exception,
     report_trace,
-    get_tracer,
+    get_aiohttp_tracer,
 )
 from time import time
 from types import SimpleNamespace
@@ -36,8 +36,8 @@ class TestRPTrace(unittest.TestCase):
     def tearDown(self):
         self.loop.close()
 
-    def test_get_tracer(self):
-        assert isinstance(get_tracer(), TraceConfig)
+    def test_get_aiohttp_tracer(self):
+        assert isinstance(get_aiohttp_tracer(), TraceConfig)
 
     def test_on_request_start(self):
         session = MagicMock()
@@ -94,7 +94,7 @@ class TestRPTrace(unittest.TestCase):
         # Verify that payload_size_bytes has accumulated
         assert context.response_size_bytes == len(params.chunk) * 3
 
-    @patch('runpod.serverless.modules.rp_trace.report_trace')
+    @patch('runpod.tracer.report_trace')
     def test_on_request_end(self, mock_report_trace):
         session = MagicMock()
         context = SimpleNamespace(on_request_start=self.loop.time())
@@ -103,7 +103,7 @@ class TestRPTrace(unittest.TestCase):
         self.loop.run_until_complete(on_request_end(session, context, params))
         mock_report_trace.assert_called_once()
 
-    @patch('runpod.serverless.modules.rp_trace.report_trace')
+    @patch('runpod.tracer.report_trace')
     def test_on_request_exception(self, mock_report_trace):
         session = MagicMock()
         context = SimpleNamespace(on_request_start=self.loop.time())
@@ -113,7 +113,7 @@ class TestRPTrace(unittest.TestCase):
         mock_report_trace.assert_called_once()
         assert context.exception
 
-    @patch('runpod.serverless.modules.rp_trace.log')
+    @patch('runpod.tracer.log')
     def test_report_trace(self, mock_log):
         context = SimpleNamespace()
         context.trace_id = "test-trace-id"
@@ -134,15 +134,15 @@ class TestRPTrace(unittest.TestCase):
             "payload_size_bytes": 1024,
             "response_size_bytes": 2048,
             "retries": 0,
-            "transfer": 1000.0,  # 1.5 - 0.5 seconds to milliseconds
             "total": 1500.0,  # 1.5 seconds to milliseconds
+            "transfer": 1000.0,  # 1.5 - 0.5 seconds to milliseconds
             "response_status": 200
         })
 
         report_trace(context, params, elapsed, mock_log.trace)
         mock_log.trace.assert_called_once_with(expected_report)
 
-    @patch('runpod.serverless.modules.rp_trace.log')
+    @patch('runpod.tracer.log')
     def test_report_trace_error_log(self, mock_log):
         context = SimpleNamespace()
         context.trace_id = "test-trace-id"
@@ -161,8 +161,8 @@ class TestRPTrace(unittest.TestCase):
             "connect": 500.0,
             "retries": 3,
             "exception": "Test Exception",
-            "transfer": 1000.0,  # 1.5 - 0.5 seconds to milliseconds
             "total": 1500.0,  # 1.5 seconds to milliseconds
+            "transfer": 1000.0,  # 1.5 - 0.5 seconds to milliseconds
             "response_status": 502
         })
 

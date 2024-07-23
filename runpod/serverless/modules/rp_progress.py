@@ -13,7 +13,6 @@ from runpod.user_agent import USER_AGENT
 from runpod.http_client import AsyncClientSession
 from runpod.serverless.modules.rp_logger import RunPodLogger
 from .rp_http import send_result
-# from .rp_trace import get_tracer
 
 log = RunPodLogger()
 
@@ -31,7 +30,6 @@ async def _create_session_async():
         connector=aiohttp.TCPConnector(limit=None),
         headers=auth_header,
         timeout=aiohttp.ClientTimeout(600, ceil_threshold=400),
-        # trace_configs=[get_tracer()]
     )
 
 

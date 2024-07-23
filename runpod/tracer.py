@@ -13,23 +13,38 @@ from aiohttp import (
     TraceRequestChunkSentParams,
     TraceResponseChunkReceivedParams,
 )
+from functools import wraps
+from time import time
 from uuid import uuid4
-from .rp_logger import RunPodLogger
+
+from .serverless.modules.rp_logger import RunPodLogger
 
 
 log = RunPodLogger()
 
 
-async def on_request_start(session, context, params: TraceRequestStartParams):
-    context.on_request_start = asyncio.get_event_loop().time()
+def headers_to_context(context: types.SimpleNamespace, headers: dict = {}):
     context.trace_id = str(uuid4())
+    context.request_id = None
+    context.user_agent = None
+
+    if headers:
+        context.trace_id = headers.get('x-trace-id', context.trace_id)
+        context.request_id = headers.get('x-request-id')
+        context.user_agent = headers.get('user-agent')
+
+    return context
+
+
+# Tracer for aiohttp
+
+
+async def on_request_start(session, context, params: TraceRequestStartParams):
+    headers = params.headers if hasattr(params, "headers") else {}
+    context = headers_to_context(context, headers)
+    context.on_request_start = asyncio.get_event_loop().time()
     context.method = params.method
     context.url = params.url.human_repr()
-
-    log.trace(f"on_request_start | context: {context}")
-
-    if hasattr(params, "headers") and params.headers:
-        log.trace(f"on_request_start | headers: {params.headers}")
 
     if hasattr(context, "trace_request_ctx") and context.trace_request_ctx:
         context.retries = context.trace_request_ctx["current_attempt"]
@@ -71,9 +86,13 @@ async def on_request_exception(session, context, params: TraceRequestExceptionPa
 
 
 def report_trace(context: types.SimpleNamespace, params, elapsed, logger=log.trace):
-    context.transfer = round((elapsed - context.connect) * 1000, 1)
-    context.connect = round(context.connect * 1000, 1)
     context.total = round(elapsed * 1000, 1)
+
+    if not hasattr(context, 'transfer'):
+        context.transfer = round((elapsed - context.connect) * 1000, 1)
+
+    if context.connect:
+        context.connect = round(context.connect * 1000, 1)
 
     if context.on_request_start:
         # exclude from report
@@ -85,7 +104,7 @@ def report_trace(context: types.SimpleNamespace, params, elapsed, logger=log.tra
     logger(json.dumps(vars(context)))
 
 
-def get_tracer() -> TraceConfig:
+def get_aiohttp_tracer() -> TraceConfig:
     trace_config = TraceConfig()
 
     trace_config.on_request_start.append(on_request_start)
