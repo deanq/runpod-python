@@ -6,7 +6,7 @@ import importlib
 import unittest
 from unittest.mock import patch
 
-import requests
+from requests import RequestException
 from runpod.serverless.modules import rp_ping
 
 class MockResponse: # pylint: disable=too-few-public-methods
@@ -41,7 +41,7 @@ class TestPing(unittest.TestCase):
         self.assertEqual(rp_ping.Heartbeat.PING_URL, "https://test.com/ping")
         self.assertEqual(rp_ping.Heartbeat.PING_INTERVAL, 20)
 
-    @patch("requests.Session.get", side_effect=mock_get)
+    @patch("runpod.http_client.SyncClientSession.get", side_effect=mock_get)
     def test_start_ping(self, mock_get_return):
         '''
         Tests that the start_ping function works correctly
@@ -80,7 +80,7 @@ class TestPing(unittest.TestCase):
         self.assertEqual(rp_ping.Heartbeat.PING_URL, "https://test.com/ping")
 
         # Exception case
-        mock_get_return.side_effect = requests.RequestException("Test Error")
+        mock_get_return.side_effect = RequestException("Test Error")
 
         with patch("runpod.serverless.modules.rp_ping.log.error") as mock_log_error:
             rp_ping.Heartbeat().ping_loop(test=True)

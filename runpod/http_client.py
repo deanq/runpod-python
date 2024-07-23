@@ -7,6 +7,7 @@ from .user_agent import USER_AGENT
 
 def get_auth_header():
     return {
+        "Content-Type": "application/json",
         "Authorization": f"{os.environ.get('RUNPOD_AI_API_KEY')}",
         "User-Agent": USER_AGENT,
     }
@@ -25,9 +26,6 @@ class AsyncClientSession(aiohttp.ClientSession):
 
 
 class SyncClientSession(requests.Session):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.tracer = trace.get_tracer(__name__)
-
-    def get_tracer(self):
-        return self.tracer
+    def request(self, method, url, **kwargs):
+        response = super().request(method, url, **kwargs)
+        return response

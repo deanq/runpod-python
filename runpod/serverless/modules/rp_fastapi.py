@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Union, Optional, Dict, Any
 
 import uvicorn
-import requests
+from requests import RequestException
 from fastapi import FastAPI, APIRouter
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import RedirectResponse
@@ -163,7 +163,7 @@ def _send_webhook(url: str, payload: Dict[str, Any]) -> bool:
             response = session.post(url, json=payload, timeout=10)
             response.raise_for_status()  # Raises exception for 4xx/5xx responses
             return True
-        except requests.RequestException as err:
+        except RequestException as err:
             print(f"WEBHOOK | Request to {url} failed: {err}")
             return False
 

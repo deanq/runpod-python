@@ -3,7 +3,6 @@ RunPod | Python | Endpoint Runner
 '''
 from typing import Any, Optional, Dict
 import time
-import requests
 from requests.adapters import HTTPAdapter, Retry
 
 from runpod.http_client import SyncClientSession
