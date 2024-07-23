@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch, Mock, MagicMock
 import pytest
 
-from requests import HTTPError
+import requests
 import runpod
 from runpod.serverless.modules import rp_fastapi
 
@@ -56,7 +56,7 @@ class TestFastAPI(unittest.TestCase):
 
     def test_webhook_sender_success(self):
         """Test the webhook sender when the request is successful."""
-        module_location = "runpod.serverless.modules.rp_fastapi.SyncClientSession.post"
+        module_location = "runpod.serverless.modules.rp_fastapi.requests.Session.post"
 
         with patch(module_location, new_callable=MagicMock) as mock_post:
             # Simulate a successful response
@@ -68,11 +68,11 @@ class TestFastAPI(unittest.TestCase):
 
     def test_webhook_sender_failure(self):
         """Test the webhook sender when the request fails."""
-        module_location = "runpod.serverless.modules.rp_fastapi.SyncClientSession.post"
+        module_location = "runpod.serverless.modules.rp_fastapi.requests.Session.post"
 
         with patch(module_location, new_callable=MagicMock) as mock_post:
             # Configure the mock to simulate a failure (e.g., a 500 status code)
-            mock_post.return_value.raise_for_status.side_effect = HTTPError()
+            mock_post.return_value.raise_for_status.side_effect = requests.HTTPError()
             mock_post.return_value.status_code = 500
 
             # Call the function

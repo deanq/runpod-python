@@ -4,11 +4,11 @@ Tests for runpod | endpoint | modules | endpoint.py
 
 import unittest
 from unittest.mock import patch, Mock
+import requests
 
 import runpod
 from runpod.endpoint import runner
 from runpod.endpoint.runner import RunPodClient, Job, Endpoint
-import runpod.http_client
 
 
 class TestRunPodClient(unittest.TestCase):
@@ -22,7 +22,7 @@ class TestRunPodClient(unittest.TestCase):
             runpod.api_key = None
             RunPodClient()
 
-    @patch.object(runpod.http_client.SyncClientSession, 'post')
+    @patch.object(requests.Session, 'post')
     def test_post_with_401(self, mock_post):
         '''
         Tests RunPodClient.post with 401 status code
@@ -36,7 +36,7 @@ class TestRunPodClient(unittest.TestCase):
             client = RunPodClient()
             client.post("ENDPOINT_ID/run", {"input": {}})
 
-    @patch.object(runpod.http_client.SyncClientSession, 'request')
+    @patch.object(requests.Session, 'request')
     def test_post(self, mock_post):
         '''
         Tests RunPodClient.post
@@ -52,7 +52,7 @@ class TestRunPodClient(unittest.TestCase):
 
         self.assertEqual(response, {"id": "123"})
 
-    @patch.object(runpod.http_client.SyncClientSession, 'get')
+    @patch.object(requests.Session, 'get')
     def test_get_with_401(self, mock_get):
         '''
         Tests RunPodClient.get with 401 status code
@@ -66,7 +66,7 @@ class TestRunPodClient(unittest.TestCase):
             client = RunPodClient()
             client.get("ENDPOINT_ID/status/123")
 
-    @patch.object(runpod.http_client.SyncClientSession, 'request')
+    @patch.object(requests.Session, 'request')
     def test_get(self, mock_get):
         '''
         Tests RunPodClient.get
@@ -157,7 +157,7 @@ class TestEndpoint(unittest.TestCase):
             runpod.api_key = None
             self.endpoint.run(self.MODEL_INPUT)
 
-    @patch.object(runpod.http_client.SyncClientSession, 'post')
+    @patch.object(requests.Session, 'post')
     def test_run_with_401(self, mock_post):
         '''
         Tests Endpoint.run with 401 status code
