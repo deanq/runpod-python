@@ -30,7 +30,6 @@ def headers_to_context(context: types.SimpleNamespace, headers: dict = {}):
 
     if headers:
         headers = structures.CaseInsensitiveDict(headers)
-        print(headers)
         context.trace_id = headers.get('x-trace-id', context.trace_id)
         context.request_id = headers.get('x-request-id')
         context.user_agent = headers.get('user-agent')

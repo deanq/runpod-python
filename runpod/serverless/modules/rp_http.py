@@ -29,7 +29,7 @@ async def _transmit(client_session: aiohttp.ClientSession, url, job_data):
 
     kwargs = {
         "data": job_data,
-        "headers": {"charset": "utf-8", "Content-Type": "application/x-www-form-urlencoded", "x-request-id": job_data["id"]},
+        "headers": {"charset": "utf-8", "Content-Type": "application/x-www-form-urlencoded"},
         "raise_for_status": True
     }
 
@@ -37,7 +37,7 @@ async def _transmit(client_session: aiohttp.ClientSession, url, job_data):
         await client_response.text()
 
 
-async def _handle_result(session, job_data, job, url_template, log_message, is_stream=False): # pylint: disable=too-many-arguments
+async def _handle_result(session: aiohttp.ClientSession, job_data, job, url_template, log_message, is_stream=False): # pylint: disable=too-many-arguments
     """
     A helper function to handle the result, either for sending or streaming.
     """
@@ -47,6 +47,7 @@ async def _handle_result(session, job_data, job, url_template, log_message, is_s
         is_stream = "true" if is_stream else "false"
         url = url_template.replace('$ID', job['id']) + f"&isStream={is_stream}"
 
+        session.headers.update({"x-request-id": job["id"]})
         await _transmit(session, url, serialized_job_data)
         log.debug(f"{log_message}", job['id'])
 
@@ -63,14 +64,14 @@ async def _handle_result(session, job_data, job, url_template, log_message, is_s
             log.info("Finished.", job['id'])
 
 
-async def send_result(session, job_data, job, is_stream=False):
+async def send_result(session: aiohttp.ClientSession, job_data, job, is_stream=False):
     """
     Return the job results.
     """
     await _handle_result(session, job_data, job, JOB_DONE_URL, "Results sent.", is_stream=is_stream)
 
 
-async def stream_result(session, job_data, job):
+async def stream_result(session: aiohttp.ClientSession, job_data, job):
     """
     Return the stream job results.
     """
