@@ -1,26 +1,27 @@
 import aiohttp
+import os
 import requests
-from opentelemetry.instrumentation.aiohttp_client import (
-    AioHttpClientInstrumentor,
-    create_trace_config,
-)
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
-from .observability import trace
+from .tracer import get_aiohttp_tracer
+from .user_agent import USER_AGENT
 
 
-# Enable instrumentation
-AioHttpClientInstrumentor().instrument()
-RequestsInstrumentor().instrument()
+def get_auth_header():
+    return {
+        "Authorization": f"{os.environ.get('RUNPOD_AI_API_KEY')}",
+        "User-Agent": USER_AGENT,
+    }
 
 
 class AsyncClientSession(aiohttp.ClientSession):
     def __init__(self, *args, **kwargs):
-        trace_config = create_trace_config()
-        super().__init__(trace_configs=[trace_config], *args, **kwargs)
-        self.tracer = trace.get_tracer(__name__)
-
-    def get_tracer(self):
-        return self.tracer
+        super().__init__(
+            connector=aiohttp.TCPConnector(limit=None),
+            headers=get_auth_header(),
+            timeout=aiohttp.ClientTimeout(600, ceil_threshold=400),
+            trace_configs=[get_aiohttp_tracer()],
+            *args,
+            **kwargs,
+        )
 
 
 class SyncClientSession(requests.Session):

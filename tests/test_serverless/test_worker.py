@@ -28,17 +28,6 @@ class TestWorker(IsolatedAsyncioTestCase):
             "rp_args": {"test_input": None},
         }
 
-    def test_get_auth_header(self):
-        """Test retrieval of the authentication header from _get_auth_header."""
-        os_info = f"{platform.system()} {platform.release()}; {platform.machine()}"
-        with patch("runpod.serverless.worker.os") as mock_os:
-            mock_os.environ.get.return_value = "test"
-            assert runpod.serverless.worker._get_auth_header(
-            ) == {
-                'Authorization': 'test',
-                'User-Agent': f'RunPod-Python-SDK/{runpod_version} ({os_info}) Language/Python {platform.python_version()}'  # pylint: disable=line-too-long
-            }
-
     def test_is_local(self):
         '''
         Test _is_local
@@ -197,7 +186,7 @@ class TestRunWorker(IsolatedAsyncioTestCase):
             }
         }
 
-    @patch("aiohttp.ClientSession")
+    @patch("runpod.http_client.AsyncClientSession")
     @patch("runpod.serverless.modules.rp_scale.get_job")
     @patch("runpod.serverless.worker.run_job")
     @patch("runpod.serverless.worker.stream_result")
@@ -329,7 +318,7 @@ class TestRunWorker(IsolatedAsyncioTestCase):
         _, args, _ = mock_send_result.mock_calls[0]
         assert args[1] == {'output': ['test1', 'test2'], 'stopPod': True}
 
-    @patch("aiohttp.ClientSession")
+    @patch("runpod.http_client.AsyncClientSession")
     @patch("runpod.serverless.modules.rp_scale.get_job")
     @patch("runpod.serverless.worker.run_job")
     @patch("runpod.serverless.worker.stream_result")
@@ -368,7 +357,7 @@ class TestRunWorker(IsolatedAsyncioTestCase):
         assert mock_stream_result.called is False
         assert mock_session.called
 
-    @patch("aiohttp.ClientSession")
+    @patch("runpod.http_client.AsyncClientSession")
     @patch("runpod.serverless.modules.rp_scale.get_job")
     @patch("runpod.serverless.worker.run_job")
     @patch("runpod.serverless.worker.stream_result")
