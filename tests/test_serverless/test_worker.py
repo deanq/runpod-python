@@ -186,7 +186,7 @@ class TestRunWorker(IsolatedAsyncioTestCase):
             }
         }
 
-    @patch("runpod.http_client.AsyncClientSession")
+    @patch("runpod.serverless.worker.AsyncClientSession")
     @patch("runpod.serverless.modules.rp_scale.get_job")
     @patch("runpod.serverless.worker.run_job")
     @patch("runpod.serverless.worker.stream_result")
@@ -318,7 +318,7 @@ class TestRunWorker(IsolatedAsyncioTestCase):
         _, args, _ = mock_send_result.mock_calls[0]
         assert args[1] == {'output': ['test1', 'test2'], 'stopPod': True}
 
-    @patch("runpod.http_client.AsyncClientSession")
+    @patch("runpod.serverless.worker.AsyncClientSession")
     @patch("runpod.serverless.modules.rp_scale.get_job")
     @patch("runpod.serverless.worker.run_job")
     @patch("runpod.serverless.worker.stream_result")
@@ -357,7 +357,7 @@ class TestRunWorker(IsolatedAsyncioTestCase):
         assert mock_stream_result.called is False
         assert mock_session.called
 
-    @patch("runpod.http_client.AsyncClientSession")
+    @patch("runpod.serverless.worker.AsyncClientSession")
     @patch("runpod.serverless.modules.rp_scale.get_job")
     @patch("runpod.serverless.worker.run_job")
     @patch("runpod.serverless.worker.stream_result")
