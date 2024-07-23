@@ -13,7 +13,7 @@ from aiohttp import (
     TraceRequestChunkSentParams,
     TraceResponseChunkReceivedParams,
 )
-from requests import Response, PreparedRequest
+from requests import Response, PreparedRequest, structures
 from time import time
 from uuid import uuid4
 
@@ -29,6 +29,8 @@ def headers_to_context(context: types.SimpleNamespace, headers: dict = {}):
     context.user_agent = None
 
     if headers:
+        headers = structures.CaseInsensitiveDict(headers)
+        print(headers)
         context.trace_id = headers.get('x-trace-id', context.trace_id)
         context.request_id = headers.get('x-request-id')
         context.user_agent = headers.get('user-agent')
@@ -45,6 +47,7 @@ async def on_request_start(session, context, params: TraceRequestStartParams):
     context.on_request_start = asyncio.get_event_loop().time()
     context.method = params.method
     context.url = params.url.human_repr()
+    context.mode = "async"
 
     if hasattr(context, "trace_request_ctx") and context.trace_request_ctx:
         context.retries = context.trace_request_ctx["current_attempt"]
@@ -137,6 +140,7 @@ class TraceRequest:
             self.context = headers_to_context(self.context, self.request.headers)
             self.context.method = self.request.method
             self.context.url = self.request.url
+            self.context.mode = "sync"
 
             if isinstance(self.request.body, bytes):
                 self.context.payload_size_bytes = len(self.request.body)
