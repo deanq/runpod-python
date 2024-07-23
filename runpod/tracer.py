@@ -99,6 +99,9 @@ def report_trace(context: types.SimpleNamespace, params, elapsed, logger=log.tra
     if hasattr(context, 'on_request_start'):
         delattr(context, 'on_request_start')
 
+    if hasattr(context, 'trace_request_ctx'):
+        delattr(context, 'trace_request_ctx')
+
     if hasattr(params, 'response') and params.response:
         context.response_status = params.response.status
 
