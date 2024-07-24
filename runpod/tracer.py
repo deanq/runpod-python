@@ -105,7 +105,7 @@ def report_trace(context: types.SimpleNamespace, params, elapsed, logger=log.tra
     if hasattr(params, 'response') and params.response:
         context.response_status = params.response.status
 
-    logger(json.dumps(vars(context)))
+    logger(json.dumps(vars(context)), context.request_id)
 
 
 def get_aiohttp_tracer() -> TraceConfig:
