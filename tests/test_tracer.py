@@ -27,7 +27,7 @@ from unittest.mock import patch, MagicMock
 from yarl import URL
 
 
-class TestRPTrace(unittest.TestCase):
+class TestTracer(unittest.TestCase):
 
     def setUp(self):
         self.loop = asyncio.new_event_loop()
@@ -97,7 +97,7 @@ class TestRPTrace(unittest.TestCase):
     @patch('runpod.tracer.report_trace')
     def test_on_request_end(self, mock_report_trace):
         session = MagicMock()
-        context = SimpleNamespace(on_request_start=self.loop.time())
+        context = SimpleNamespace(on_request_start=self.loop.time(), connect=0.5)
         params = MagicMock()
 
         self.loop.run_until_complete(on_request_end(session, context, params))
@@ -106,7 +106,7 @@ class TestRPTrace(unittest.TestCase):
     @patch('runpod.tracer.report_trace')
     def test_on_request_exception(self, mock_report_trace):
         session = MagicMock()
-        context = SimpleNamespace(on_request_start=self.loop.time())
+        context = SimpleNamespace(on_request_start=self.loop.time(), connect=0.5)
         params = TraceRequestExceptionParams("GET", URL("http://test.com/"), headers={}, exception=Exception("Test Exception"))
 
         self.loop.run_until_complete(on_request_exception(session, context, params))
@@ -122,13 +122,14 @@ class TestRPTrace(unittest.TestCase):
         context.payload_size_bytes = 1024
         context.response_size_bytes = 2048
         context.retries = 0
+        context.transfer = 1.0
 
         params = MagicMock()
         params.response.status = 200
 
         elapsed = 1.5
 
-        expected_report = json.dumps({
+        expected_report = {
             "trace_id": "test-trace-id",
             "connect": 500.0,
             "payload_size_bytes": 1024,
@@ -137,10 +138,11 @@ class TestRPTrace(unittest.TestCase):
             "total": 1500.0,  # 1.5 seconds to milliseconds
             "transfer": 1000.0,  # 1.5 - 0.5 seconds to milliseconds
             "response_status": 200
-        })
+        }
 
         report_trace(context, params, elapsed, mock_log.trace)
-        mock_log.trace.assert_called_once_with(expected_report)
+
+        assert expected_report == json.loads(mock_log.trace.call_args[0][0])
 
     @patch('runpod.tracer.log')
     def test_report_trace_error_log(self, mock_log):
@@ -150,13 +152,14 @@ class TestRPTrace(unittest.TestCase):
         context.connect = 0.5
         context.retries = 3
         context.exception = str(Exception("Test Exception"))
+        context.transfer = 1.0
 
         params = MagicMock()
         params.response.status = 502
 
         elapsed = 1.5
 
-        expected_report = json.dumps({
+        expected_report = {
             "trace_id": "test-trace-id",
             "connect": 500.0,
             "retries": 3,
@@ -164,7 +167,8 @@ class TestRPTrace(unittest.TestCase):
             "total": 1500.0,  # 1.5 seconds to milliseconds
             "transfer": 1000.0,  # 1.5 - 0.5 seconds to milliseconds
             "response_status": 502
-        })
+        }
 
         report_trace(context, params, elapsed, mock_log.error)
-        mock_log.error.assert_called_once_with(expected_report)
+
+        assert expected_report == json.loads(mock_log.error.call_args[0][0])
