@@ -139,4 +139,4 @@ class RunPodLogger:
         '''
         trace log (buffered until flushed)
         '''
-        self.log(message, 'TRACE')
+        self.log(message, 'TRACE', request_id)
