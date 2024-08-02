@@ -46,11 +46,10 @@ class JobScaler():
                 asyncio.create_task(get_job(session, retry=False))
                 for _ in range(job_list.get_job_count())
             ]
+            log.debug(f"Get jobs: {tasks}")
 
             async for response in asyncio.as_completed(tasks):
-                if job := response.result():
-                    log.debug(f"Got job: {job}")
-                    yield job.result()
+                log.debug(f"Got job: {response}")
+                yield response.result()
 
         asyncio.get_event_loop().stop()
-
