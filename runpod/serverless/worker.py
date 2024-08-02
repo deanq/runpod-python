@@ -13,11 +13,10 @@ from runpod.serverless.modules import (
 )
 from .modules.rp_job import run_job, run_job_generator
 from .modules.rp_http import send_result, stream_result
-from .modules.worker_state import REF_COUNT_ZERO, Jobs
+from .modules.worker_state import REF_COUNT_ZERO
 from .utils import rp_debugger
 
 log = rp_logger.RunPodLogger()
-job_list = Jobs()
 heartbeat = rp_ping.Heartbeat()
 
 
@@ -87,23 +86,11 @@ async def run_worker(config: Dict[str, Any]) -> None:
     client_session = AsyncClientSession()
 
     async with client_session as session:
-        job_scaler = rp_scale.JobScaler(
-            concurrency_modifier=config.get('concurrency_modifier', None)
-        )
+        job_scaler = rp_scale.JobScaler()
 
-        while job_scaler.is_alive():
-
-            async for job in job_scaler.get_jobs(session):
-                # Process the job here
-                asyncio.create_task(_process_job(job, session, job_scaler, config))
-
-                # Allow job processing
-                await asyncio.sleep(0)
-
-            await asyncio.sleep(0)
-
-        # Stops the worker loop if the kill_worker flag is set.
-        asyncio.get_event_loop().stop()
+        async for job in job_scaler.get_jobs(session):
+            # Process each job as coroutine
+            asyncio.create_task(_process_job(job, session, job_scaler, config))
 
 
 def main(config: Dict[str, Any]) -> None:
