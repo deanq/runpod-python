@@ -6,6 +6,7 @@ import os
 import uuid
 import time
 from typing import Optional, Dict, Any, Union
+from asyncio import Queue
 
 REF_COUNT_ZERO = time.perf_counter()  # Used for benchmarking with the debugger.
 
@@ -98,3 +99,23 @@ class Jobs:
         Returns the number of jobs.
         '''
         return len(self.jobs)
+
+
+class JobsQueue(Queue):
+    async def add_job(self, job_id, job_input=None, webhook=None):
+        '''
+        Adds a job to the list of jobs.
+        '''
+        await self.put(Job(job_id, job_input, webhook))
+
+    async def get_job(self):
+        '''
+        Returns the next job in queue.
+        '''
+        return await self.get()
+
+    def get_job_count(self):
+        '''
+        Returns the number of jobs.
+        '''
+        return self.qsize()
