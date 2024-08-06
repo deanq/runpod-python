@@ -7,6 +7,7 @@ import uuid
 import time
 from typing import Optional, Dict, Any, Union
 from asyncio import Queue
+from ..utils import Singleton
 
 REF_COUNT_ZERO = time.perf_counter()  # Used for benchmarking with the debugger.
 
@@ -53,17 +54,10 @@ class Job:
 # ---------------------------------------------------------------------------- #
 #                                    Tracker                                   #
 # ---------------------------------------------------------------------------- #
-class Jobs:
+class Jobs(metaclass=Singleton):
     ''' Track the state of current jobs.'''
 
-    _instance = None
     jobs = set()
-
-    def __new__(cls):
-        if Jobs._instance is None:
-            Jobs._instance = object.__new__(cls)
-            Jobs._instance.jobs = set()
-        return Jobs._instance
 
     def add_job(self, job_id, job_input=None, webhook=None):
         '''
@@ -101,7 +95,7 @@ class Jobs:
         return len(self.jobs)
 
 
-class JobsQueue(Queue):
+class JobsQueue(Queue, metaclass=Singleton):
     async def add_job(self, job_id, job_input=None, webhook=None):
         '''
         Adds a job to the list of jobs.
