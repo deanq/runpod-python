@@ -66,6 +66,7 @@ async def on_request_start(
     context = headers_to_context(context, headers)
     context.start_time = time()
     context.on_request_start = asyncio.get_event_loop().time()
+    context.connect = 0
     context.method = params.method
     context.url = params.url.human_repr()
     context.mode = "async"
