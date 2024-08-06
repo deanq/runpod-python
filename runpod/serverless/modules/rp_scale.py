@@ -86,13 +86,14 @@ class JobScaler():
             await asyncio.sleep(0)
 
 
-class JobScheduler():
+class JobScheduler(JobScaler):
     """
     Job Scaler. This class is responsible for scaling the number of concurrent requests.
     """
 
     def __init__(self):
         self._is_alive = True
+        self.queue = JobsQueue()
 
     def is_alive(self):
         """
@@ -106,22 +107,49 @@ class JobScheduler():
         """
         self._is_alive = False
 
-    async def collector(self, collectorFn: typing.Coroutine, queue: JobsQueue = JobsQueue()):
+    async def collector(self, collectorFn: typing.Coroutine):
         """
-        Retrieve jobs from the server
+        Retrieve jobs from the server and add them to the queue.
 
-        Returns:
-            List[Any]: A list of job data retrieved from the server.
+        This function runs in a loop, waiting for jobs to be received from the server.
+        If a job is received, it is added to the queue for processing.
+        The loop waits for 1 second before fetching jobs again.
+        
+        Args:
+            collectorFn (typing.Coroutine): The coroutine function used to get jobs from the server.
         """
         while self.is_alive():
-            log.debug(f"Jobs in progress: {queue.get_job_count()}")
+            log.debug(f"Jobs in progress: {self.queue.get_job_count()}")
             if job := await collectorFn():
                 log.debug(f"Job received {job}")
-                await queue.add_job(job)
+                await self.queue.add_job(job)
+            # Wait for 1 second before fetching jobs again
+            await asyncio.sleep(1)
 
-    async def processor(self, processorFn: typing.Coroutine,queue: JobsQueue = JobsQueue()):
-        while self.is_alive():
-            job = await queue.get_job()
-            await processorFn(job)
-            log.debug(f"Job processed {job}")
-            queue.task_done()
+    async def processor(self, processorFn: typing.Coroutine):
+        """
+        Processes jobs from the jobs queue using the provided processor function.
+
+        Args:
+            processorFn (typing.Coroutine): The coroutine function used to process jobs from the queue.
+        """
+        while self.is_alive:
+            if not self.queue.empty():
+                job = await self.queue.get()
+                try:
+                    # Process the job using the provided coroutine function
+                    await processorFn(job)
+                finally:
+                    self.queue.task_done()
+            else:
+                # Sleep briefly if no jobs to process
+                await asyncio.sleep(1)
+
+    async def run(self, collectorFn: typing.Coroutine, processorFn: typing.Coroutine):
+        """
+        Runs both the collector and processor tasks.
+        """
+        await asyncio.gather(
+            self.collector(collectorFn),
+            self.processor(processorFn),
+        )

@@ -6,18 +6,17 @@ import os
 import asyncio
 from typing import Dict, Any
 
-from runpod.http_client import AsyncClientSession
+from runpod.http_client import AsyncClientSession, ClientSession
 from runpod.serverless.modules import (
     rp_logger, rp_local, rp_handler, rp_ping,
     rp_scale
 )
 from .modules.rp_job import run_job, run_job_generator, get_job
 from .modules.rp_http import send_result, stream_result
-from .modules.worker_state import REF_COUNT_ZERO, Jobs, JobsQueue
+from .modules.worker_state import REF_COUNT_ZERO
 from .utils import rp_debugger
 
 log = rp_logger.RunPodLogger()
-job_list = Jobs()
 heartbeat = rp_ping.Heartbeat()
 
 
@@ -32,7 +31,7 @@ def _is_local(config) -> bool:
     return False
 
 
-async def _process_job(job, session, job_scaler, config):
+async def _process_job(job, session: ClientSession, job_scaler: rp_scale.JobScaler, config):
     if rp_handler.is_generator(config["handler"]):
         is_stream = True
         generator_output = run_job_generator(config["handler"], job)
@@ -112,7 +111,7 @@ async def run_worker(config: Dict[str, Any]) -> None:
         asyncio.get_event_loop().stop()
 
 
-async def run_worker_scheduler(config: Dict[str, Any]) -> None:
+async def run_scheduler(config: Dict[str, Any]) -> None:
     """
     Starts the worker loop for multi-processing.
 
@@ -124,34 +123,24 @@ async def run_worker_scheduler(config: Dict[str, Any]) -> None:
     client_session = AsyncClientSession()
 
     async with client_session as session:
-        queue = JobsQueue()
-        job_scaler = rp_scale.JobScheduler()
+        job_scheduler = rp_scale.JobScheduler()
+        get_jobs = get_job(session)
+        run_jobs = run_scheduled_job(session, job_scheduler, config)
+        await asyncio.create_task(job_scheduler.run(get_jobs, run_jobs))
 
-        get_jobs = get_job(session, retry=True)
-        run_jobs = run_scheduled_job(session, job_scaler, config)
-        
-        await asyncio.gather(
-            job_scaler.collector(get_jobs, queue),
-            job_scaler.processor(run_jobs, queue),
-        )
 
-def main(config: Dict[str, Any]) -> None:
-    """
-    Checks if the worker is running locally or on RunPod.
-    If running locally, the test job is run and the worker exits.
-    If running on RunPod, the worker loop is created.
-    """
+async def run_scheduler(config: Dict[str, Any]) -> None:
+    heartbeat.start_ping()
+
     if _is_local(config):
-        asyncio.run(rp_local.run_local(config))
+        await rp_local.run_local(config)
 
     else:
-        try:
-            work_loop = asyncio.new_event_loop()
-            if os.getenv('RUNPOD_DEANQ', False):
-                asyncio.ensure_future(run_worker_scheduler(config), loop=work_loop)
-            else:
-                asyncio.ensure_future(run_worker(config), loop=work_loop)
-                work_loop.run_forever()
+        if os.getenv('RUNPOD_DEANQ', False):
+            await run_scheduler(config)
+        else:
+            await run_worker(config)
 
-        finally:
-            work_loop.close()
+
+def main(config: Dict[str, Any]) -> None:
+    asyncio.run(run_scheduler(config))
