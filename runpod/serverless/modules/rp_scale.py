@@ -59,4 +59,4 @@ class JobScaler():
                 if job := await job_future:
                     yield job
 
-            await asyncio.sleep(0)
+            await asyncio.sleep(5)

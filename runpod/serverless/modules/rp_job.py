@@ -66,9 +66,9 @@ async def get_job(session: ClientSession, retry=True) -> Optional[Dict[str, Any]
 
                 if response.status == 429:
                     log.debug("Received 429 status, debounced for 5 seconds.")
+                    await asyncio.sleep(5)
                     if retry is False:
                         break
-                    await asyncio.sleep(5)
                     continue
 
                 if response.status != 200:
