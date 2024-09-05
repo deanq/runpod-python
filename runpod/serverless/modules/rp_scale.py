@@ -58,3 +58,5 @@ class JobScaler():
             for job_future in asyncio.as_completed(tasks):
                 if job := await job_future:
                     yield job
+
+            await asyncio.sleep(0)

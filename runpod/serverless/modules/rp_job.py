@@ -34,7 +34,8 @@ def _job_get_url():
         str: The prepared URL for the 'get' request to the serverless API.
     """
     job_in_progress = '1' if job_list.get_job_list() else '0'
-    return JOB_GET_URL + f"&job_in_progress={job_in_progress}"
+    job_get_url = JOB_GET_URL.replace("/job-take/", "/job-take-batch/")
+    return  f"{job_get_url}&job_in_progress={job_in_progress}&batch_size=1"
 
 
 async def get_job(session: ClientSession, retry=True) -> Optional[Dict[str, Any]]:
@@ -69,7 +70,7 @@ async def get_job(session: ClientSession, retry=True) -> Optional[Dict[str, Any]
                         break
                     continue
 
-                received_request = await response.json()
+                received_request = (await response.json())[0]
                 log.debug(f"Request Received | {received_request}")
 
                 # Check if the job is valid
@@ -104,7 +105,7 @@ async def get_job(session: ClientSession, retry=True) -> Optional[Dict[str, Any]
             if retry is False:
                 break
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(5)
     else:
         job_list.add_job(next_job["id"])
         log.debug("Request ID added.", next_job['id'])
