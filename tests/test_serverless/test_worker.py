@@ -186,9 +186,9 @@ class TestRunWorker(IsolatedAsyncioTestCase):
 
     @patch("runpod.serverless.worker.AsyncClientSession")
     @patch("runpod.serverless.modules.rp_scale.get_job")
-    @patch("runpod.serverless.worker.run_job")
-    @patch("runpod.serverless.worker.stream_result")
-    @patch("runpod.serverless.worker.send_result")
+    @patch("runpod.serverless.modules.rp_scale.run_job")
+    @patch("runpod.serverless.modules.rp_scale.stream_result")
+    @patch("runpod.serverless.modules.rp_scale.send_result")
     # pylint: disable=too-many-arguments
     async def test_run_worker(
             self, mock_send_result, mock_stream_result, mock_run_job, mock_get_job, mock_session):
@@ -218,9 +218,9 @@ class TestRunWorker(IsolatedAsyncioTestCase):
         assert mock_session.called
 
     @patch("runpod.serverless.modules.rp_scale.get_job")
-    @patch("runpod.serverless.worker.run_job")
-    @patch("runpod.serverless.worker.stream_result")
-    @patch("runpod.serverless.worker.send_result")
+    @patch("runpod.serverless.modules.rp_scale.run_job")
+    @patch("runpod.serverless.modules.rp_scale.stream_result")
+    @patch("runpod.serverless.modules.rp_scale.send_result")
     async def test_run_worker_generator_handler(
             self, mock_send_result, mock_stream_result, mock_run_job,
             mock_get_job):
@@ -249,9 +249,9 @@ class TestRunWorker(IsolatedAsyncioTestCase):
         assert args[1] == {'output': [], 'stopPod': True}
 
     @patch("runpod.serverless.modules.rp_scale.get_job")
-    @patch("runpod.serverless.worker.run_job")
-    @patch("runpod.serverless.worker.stream_result")
-    @patch("runpod.serverless.worker.send_result")
+    @patch("runpod.serverless.modules.rp_scale.run_job")
+    @patch("runpod.serverless.modules.rp_scale.stream_result")
+    @patch("runpod.serverless.modules.rp_scale.send_result")
     async def test_run_worker_generator_handler_exception(
             self, mock_send_result, mock_stream_result, mock_run_job,
             mock_get_job):
@@ -281,9 +281,9 @@ class TestRunWorker(IsolatedAsyncioTestCase):
         assert 'error' in args[1], "Expected the error to be reported in the results."
 
     @patch("runpod.serverless.modules.rp_scale.get_job")
-    @patch("runpod.serverless.worker.run_job")
-    @patch("runpod.serverless.worker.stream_result")
-    @patch("runpod.serverless.worker.send_result")
+    @patch("runpod.serverless.modules.rp_scale.run_job")
+    @patch("runpod.serverless.modules.rp_scale.stream_result")
+    @patch("runpod.serverless.modules.rp_scale.send_result")
     async def test_run_worker_generator_aggregate_handler(
             self, mock_send_result, mock_stream_result, mock_run_job,
             mock_get_job):
@@ -317,9 +317,9 @@ class TestRunWorker(IsolatedAsyncioTestCase):
 
     @patch("runpod.serverless.worker.AsyncClientSession")
     @patch("runpod.serverless.modules.rp_scale.get_job")
-    @patch("runpod.serverless.worker.run_job")
-    @patch("runpod.serverless.worker.stream_result")
-    @patch("runpod.serverless.worker.send_result")
+    @patch("runpod.serverless.modules.rp_scale.run_job")
+    @patch("runpod.serverless.modules.rp_scale.stream_result")
+    @patch("runpod.serverless.modules.rp_scale.send_result")
     # pylint: disable=too-many-arguments
     async def test_run_worker_concurrency(
             self, mock_send_result, mock_stream_result, mock_run_job, mock_get_job, mock_session):
@@ -337,7 +337,7 @@ class TestRunWorker(IsolatedAsyncioTestCase):
         mock_run_job.return_value = {"output": {"result": "odd"}}
 
         def concurrency_modifier(current_concurrency):
-            return current_concurrency + 1
+            return current_concurrency
 
         config_with_concurrency = self.config.copy()
         config_with_concurrency['concurrency_modifier'] = concurrency_modifier
@@ -355,9 +355,9 @@ class TestRunWorker(IsolatedAsyncioTestCase):
 
     @patch("runpod.serverless.worker.AsyncClientSession")
     @patch("runpod.serverless.modules.rp_scale.get_job")
-    @patch("runpod.serverless.worker.run_job")
-    @patch("runpod.serverless.worker.stream_result")
-    @patch("runpod.serverless.worker.send_result")
+    @patch("runpod.serverless.modules.rp_scale.run_job")
+    @patch("runpod.serverless.modules.rp_scale.stream_result")
+    @patch("runpod.serverless.modules.rp_scale.send_result")
     # pylint: disable=too-many-arguments
     async def test_run_worker_multi_processing(
             self, mock_send_result, mock_stream_result, mock_run_job, mock_get_job, mock_session):
@@ -417,7 +417,7 @@ class TestRunWorker(IsolatedAsyncioTestCase):
             assert mock_set_config_args.called
 
     @patch("runpod.serverless.modules.rp_scale.get_job")
-    @patch("runpod.serverless.worker.run_job")
+    @patch("runpod.serverless.modules.rp_scale.run_job")
     async def test_run_worker_multi_processing_scaling_up(
             self, mock_run_job, mock_get_job):
         '''

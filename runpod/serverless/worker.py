@@ -43,7 +43,7 @@ async def run_worker(config: Dict[str, Any]) -> None:
 
     # Create an async session that will be closed when the worker is killed.
     async with AsyncClientSession() as session:
-        # Create a JobScaler responsible for adjusting the concurrency 
+        # Create a JobScaler responsible for adjusting the concurrency
         # of the worker based on the modifier callable.
         job_scaler = rp_scale.JobScaler(
             concurrency_modifier=config.get('concurrency_modifier', None)
@@ -71,10 +71,4 @@ def main(config: Dict[str, Any]) -> None:
         asyncio.run(rp_local.run_local(config))
 
     else:
-        try:
-            work_loop = asyncio.new_event_loop()
-            asyncio.ensure_future(run_worker(config), loop=work_loop)
-            work_loop.run_forever()
-
-        finally:
-            work_loop.close()
+        asyncio.run(run_worker(config))

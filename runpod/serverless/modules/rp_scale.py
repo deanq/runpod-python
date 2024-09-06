@@ -18,13 +18,32 @@ log = RunPodLogger()
 job_list = JobsQueue()
 
 
+def _default_concurrency_modifier(current_concurrency: int) -> int:
+    """
+    Default concurrency modifier.
+
+    This function returns the current concurrency without any modification.
+
+    Args:
+        current_concurrency (int): The current concurrency.
+
+    Returns:
+        int: The current concurrency.
+    """
+    return current_concurrency
+
+
 class JobScaler():
     """
     Job Scaler. This class is responsible for scaling the number of concurrent requests.
     """
 
-    def __init__(self, concurrency_modifier = lambda x: x):
-        self.concurrency_modifier = concurrency_modifier
+    def __init__(self, concurrency_modifier: Any):
+        if concurrency_modifier is None:
+            self.concurrency_modifier = _default_concurrency_modifier
+        else:
+            self.concurrency_modifier = concurrency_modifier
+
         self.current_concurrency = 1
         self._is_alive = True
 
@@ -114,6 +133,7 @@ class JobScaler():
                 # Send the job result to SLS
                 await send_result(session, job_result, job, is_stream=is_stream)
 
+            # pylint: disable=broad-exception-raised
             except Exception as e:
                 print(f"Exception occurred while processing job {job}: {e}")
 
