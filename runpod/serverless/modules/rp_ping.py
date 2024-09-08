@@ -7,7 +7,7 @@ import time
 import threading
 
 import requests
-from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter, Retry
 
 from runpod.http_client import SyncClientSession
 from runpod.version import __version__ as runpod_version
@@ -33,7 +33,7 @@ class Heartbeat:
         Initializes the Heartbeat class.
         '''
         self._session = SyncClientSession()
-        self._session.headers.update({"Authorization": f"{os.environ.get('RUNPOD_AI_API_KEY')}"})
+        self._session.headers.update({"Authorization": os.environ.get('RUNPOD_AI_API_KEY')})
 
         retry_strategy = Retry(
             total=retries,
@@ -42,13 +42,16 @@ class Heartbeat:
             backoff_factor=1
         )
 
-        adapter = requests.adapters.HTTPAdapter(
+        adapter = HTTPAdapter(
             pool_connections=pool_connections,
             pool_maxsize=pool_connections,
             max_retries=retry_strategy
         )
         self._session.mount('http://', adapter)
         self._session.mount('https://', adapter)
+
+        self._stop_event = threading.Event()  # Event to signal the heartbeat to stop
+        self._thread = None  # Thread for the ping loop
 
     def start_ping(self, test=False):
         '''
@@ -66,17 +69,17 @@ class Heartbeat:
             log.error("Ping URL not set, cannot start ping.")
             return
 
-        if not Heartbeat._thread_started:
-            threading.Thread(target=self.ping_loop, daemon=True, args=(test,)).start()
-            Heartbeat._thread_started = True
+        log.info(f"Starting heartbeats with interval {self.PING_INTERVAL} seconds.")
+        self._thread = threading.Thread(target=self.ping_loop, args=(test,), daemon=True)
+        self._thread.start()
 
     def ping_loop(self, test=False):
         '''
-        Sends heartbeat pings to the Runpod server.
+        Continuously sends heartbeat pings to the Runpod server in the background.
         '''
-        while True:
+        while not self._stop_event.is_set():
             self._send_ping()
-            time.sleep(self.PING_INTERVAL)
+            time.sleep(self.ping_interval)  # Sleep for the ping interval
 
             if test:
                 return
@@ -96,8 +99,20 @@ class Heartbeat:
                 self.PING_URL, params=ping_params,
                 timeout=self.PING_INTERVAL*2
             )
-
-            log.debug(f"Heartbeat Sent | URL: {self.PING_URL} | Status: {result.status_code}")
+            if result.status_code == 200:
+                log.debug(f"Heartbeat Sent | URL: {self.PING_URL} | Status: {result.status_code}")
+            else:
+                log.error(f"Failed to send heartbeat, status code: {result.status_code}")
 
         except requests.RequestException as err:
             log.error(f"Ping Request Error: {err}, attempting to restart ping.")
+
+    def stop_ping(self):
+        '''
+        Stops the heartbeat pings by setting the stop event and waiting for the thread to finish.
+        '''
+        log.info("Stopping heartbeat pings.")
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join()  # Wait for the ping thread to finish
+        self._session.close()  # Close the session
