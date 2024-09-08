@@ -57,6 +57,7 @@ class JobScaler():
         """
         Whether to kill the worker.
         """
+        log.debug("kill worker")
         self._is_alive = False
 
     async def get_jobs(self, session: ClientSession, timeout: int = 60):

@@ -41,28 +41,27 @@ async def run_worker(config: Dict[str, Any]) -> None:
     # Start pinging RunPod to show that the worker is alive.
     heartbeat.start_ping()
 
-    # Create an async session that will be closed when the worker is killed.
-    async with AsyncClientSession() as session:
-        # Create a JobScaler responsible for adjusting the concurrency
-        # of the worker based on the modifier callable.
-        job_scaler = rp_scale.JobScaler(
-            concurrency_modifier=config.get('concurrency_modifier', None)
-        )
+    try:
+        # Create an async session that will be closed when the worker is killed.
+        async with AsyncClientSession() as session:
+            # Create a JobScaler responsible for adjusting the concurrency
+            # of the worker based on the modifier callable.
+            job_scaler = rp_scale.JobScaler(
+                concurrency_modifier=config.get('concurrency_modifier', None)
+            )
 
-        # Create a task that will run the get_jobs method in the background.
-        # This task will fetch jobs from RunPod and add them to the queue.
-        jobtake_task = asyncio.create_task(job_scaler.get_jobs(session))
+            # Create a task that will run the get_jobs method in the background.
+            jobtake_task = asyncio.create_task(job_scaler.get_jobs(session))
 
-        # Create a task that will run the run_jobs method in the background.
-        # This task will process jobs from the queue.
-        jobrun_task = asyncio.create_task(job_scaler.run_jobs(session, config))
+            # Create a task that will run the run_jobs method in the background.
+            jobrun_task = asyncio.create_task(job_scaler.run_jobs(session, config))
 
-        # Concurrently run both tasks and wait for both to finish.
-        await asyncio.gather(jobtake_task, jobrun_task)
+            # Concurrently run both tasks and wait for both to finish.
+            await asyncio.gather(jobtake_task, jobrun_task)
 
-    # Stop pinging RunPod to show that the worker is dead.
-    heartbeat.stop_ping()
-
+    finally:
+        # Ensure that stop_ping is called when the worker finishes or an error occurs.
+        heartbeat.stop_ping()
 
 def main(config: Dict[str, Any]) -> None:
     """
