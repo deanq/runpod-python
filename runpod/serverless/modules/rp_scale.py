@@ -60,16 +60,12 @@ class JobScaler():
         log.debug("kill worker")
         self._is_alive = False
 
-    async def get_jobs(self, session: ClientSession, timeout: int = 60):
+    async def get_jobs(self, session: ClientSession):
         """
         Acquire multiple jobs from the API and add them to the jobs queue.
 
         Runs the block in an infinite loop while the worker is alive.
-
-        Stops if jobs are not acquired within the timeout period (seconds).
         """
-        start_time = asyncio.get_event_loop().time()
-
         while self.is_alive():
             self.current_concurrency = self.concurrency_modifier(self.current_concurrency)
             log.debug(f"Concurrency set to: {self.current_concurrency}")
@@ -78,30 +74,13 @@ class JobScaler():
 
             jobs_needed = self.current_concurrency - job_list.get_job_count()
 
-            if jobs_needed > 0:
-                acquired_jobs = await get_job(session, jobs_needed)
+            acquired_jobs = await get_job(session, jobs_needed)
 
-                if acquired_jobs:
-                    for job in acquired_jobs:
-                        await job_list.add_job(job)
-                    log.debug(f"Acquired {len(acquired_jobs)} jobs.")
-                    start_time = asyncio.get_event_loop().time()  # Reset the start time
+            if acquired_jobs:
+                for job in acquired_jobs:
+                    await job_list.add_job(job)
 
-                else:
-                    log.debug("No jobs acquired, backing off.")
-                    await asyncio.sleep(10)  # Back off if no jobs were acquired
-
-            else:
-                log.debug("No more jobs needed, waiting for the next cycle.")
-                await asyncio.sleep(5)  # yield control if no jobs are needed
-
-            # Check if the timeout has been exceeded
-            if asyncio.get_event_loop().time() - start_time > timeout:
-                log.debug(f"Timeout of {timeout} seconds reached, stopping job scaler.")
-                self.kill_worker()  # Stop the worker
-                break
-
-            await asyncio.sleep(0)  # yield control back to the event loop
+            await asyncio.sleep(5)  # yield control back to the event loop
 
     async def run_jobs(self, session: ClientSession, config: Dict[str, Any]):
         """
