@@ -79,7 +79,7 @@ class Heartbeat:
         '''
         while not self._stop_event.is_set():
             self._send_ping()
-            time.sleep(self.PING_INTERVAL)  # Sleep for the ping interval
+            time.sleep(self.ping_interval)  # Sleep for the ping interval
 
             if test:
                 return
