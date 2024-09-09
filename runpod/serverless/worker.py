@@ -60,9 +60,6 @@ async def run_worker(config: Dict[str, Any]) -> None:
         # Concurrently run both tasks and wait for both to finish.
         await asyncio.gather(jobtake_task, jobrun_task)
 
-    # Stop pinging RunPod to show that the worker is dead.
-    heartbeat.stop_ping()
-
 
 def main(config: Dict[str, Any]) -> None:
     """
