@@ -141,7 +141,7 @@ class JobsQueue(Queue):
         if self.empty():
             return None
 
-        return ','.join(str(job) for job in self)
+        return ','.join(job.get("id") for job in self)
 
     def get_job_count(self) -> int:
         '''
