@@ -100,18 +100,16 @@ async def run_worker(config: Dict[str, Any]) -> None:
                 task = asyncio.create_task(_process_job(job, session, job_scaler, config))
                 tasks.append(task)
 
-                # Wait for any job to finish
-                if tasks:
-                    log.info(f"Jobs in progress: {len(tasks)}")
+            # Wait for any job to finish
+            if tasks:
+                log.info(f"Jobs in progress: {len(tasks)}")
 
-                    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
-                    # Remove completed tasks from the list
-                    tasks = [t for t in tasks if t not in done]
+                # Remove completed tasks from the list
+                tasks = [t for t in tasks if t not in done]
 
-                # Allow job processing
-                await asyncio.sleep(0)
-
+            # Allow job processing
             await asyncio.sleep(0)
 
         # Ensure all remaining tasks finish before stopping
