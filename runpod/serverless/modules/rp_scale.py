@@ -69,8 +69,6 @@ class JobScaler():
             self.current_concurrency = self.concurrency_modifier(self.current_concurrency)
             log.debug(f"Concurrency set to: {self.current_concurrency}")
 
-            log.debug(f"Jobs in progress: {job_list.get_job_count()}")
-
             jobs_needed = self.current_concurrency - job_list.get_job_count()
 
             acquired_jobs = await get_job(session, jobs_needed)
@@ -78,6 +76,8 @@ class JobScaler():
             if acquired_jobs:
                 for job in acquired_jobs:
                     await job_list.add_job(job)
+
+                log.info(f"Jobs in queue: {job_list.get_job_count()}")
 
             await asyncio.sleep(5)  # yield control back to the event loop
 
@@ -100,6 +100,8 @@ class JobScaler():
 
             # Wait for any job to finish
             if tasks:
+                log.info(f"Jobs in progress: {len(tasks)}")
+
                 done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
                 # Remove completed tasks from the list
