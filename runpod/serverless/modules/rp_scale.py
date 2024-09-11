@@ -68,7 +68,6 @@ class JobScaler():
             self.current_concurrency = self.concurrency_modifier(self.current_concurrency)
             log.debug(f"Concurrency set to: {self.current_concurrency}")
 
-            log.debug(f"Jobs in progress: {job_list.get_job_count()}")
             if job_list.get_job_count() < self.current_concurrency and self.is_alive():
                 log.debug("Job list is less than concurrency, getting more jobs.")
 
@@ -82,5 +81,7 @@ class JobScaler():
                     self.job_history.append(1 if job else 0)
                     if job:
                         yield job
+
+                log.info(f"Jobs in queue: {job_list.get_job_count()}")
 
             await asyncio.sleep(0)

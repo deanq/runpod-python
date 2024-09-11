@@ -102,6 +102,8 @@ async def run_worker(config: Dict[str, Any]) -> None:
 
                 # Wait for any job to finish
                 if tasks:
+                    log.info(f"Jobs in progress: {len(tasks)}")
+
                     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
                     # Remove completed tasks from the list
