@@ -86,6 +86,8 @@ async def run_worker(config: Dict[str, Any]) -> None:
 
     client_session = AsyncClientSession()
 
+    tasks = []  # Store the tasks for concurrent job processing
+
     async with client_session as session:
         job_scaler = rp_scale.JobScaler(
             concurrency_modifier=config.get('concurrency_modifier', None)
@@ -94,13 +96,24 @@ async def run_worker(config: Dict[str, Any]) -> None:
         while job_scaler.is_alive():
 
             async for job in job_scaler.get_jobs(session):
-                # Process the job here
-                asyncio.create_task(_process_job(job, session, job_scaler, config))
+                # Create a new task for each job and add it to the task list
+                task = asyncio.create_task(_process_job(job, session, job_scaler, config))
+                tasks.append(task)
+
+                # Wait for any job to finish
+                if tasks:
+                    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+                    # Remove completed tasks from the list
+                    tasks = [t for t in tasks if t not in done]
 
                 # Allow job processing
                 await asyncio.sleep(0)
 
             await asyncio.sleep(0)
+
+        # Ensure all remaining tasks finish before stopping
+        await asyncio.gather(*tasks)
 
         # Stops the worker loop if the kill_worker flag is set.
         asyncio.get_event_loop().stop()
