@@ -96,8 +96,8 @@ class Heartbeat:
                 self.PING_URL, params=ping_params,
                 timeout=self.PING_INTERVAL*2
             )
-
-            log.debug(f"Heartbeat Sent | URL: {self.PING_URL} | Status: {result.status_code}")
+            result.url
+            log.debug(f"Heartbeat Sent | URL: {result.url} | Status: {result.status_code}")
 
         except requests.RequestException as err:
             log.error(f"Ping Request Error: {err}, attempting to restart ping.")
