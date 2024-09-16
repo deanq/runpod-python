@@ -150,3 +150,5 @@ class JobScaler():
 
         # Send the job result to SLS
         await send_result(session, job_result, job, is_stream=is_stream)
+
+        job_list.task_done()
