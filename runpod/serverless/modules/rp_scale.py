@@ -66,19 +66,28 @@ class JobScaler():
         Runs the block in an infinite loop while the worker is alive.
         """
         while self.is_alive():
-            self.current_concurrency = self.concurrency_modifier(self.current_concurrency)
-            log.debug(f"Concurrency set to: {self.current_concurrency}")
+            try:
+                self.current_concurrency = self.concurrency_modifier(self.current_concurrency)
+                log.debug(f"Concurrency set to: {self.current_concurrency}")
 
-            jobs_needed = self.current_concurrency - job_list.get_job_count()
+                jobs_needed = self.current_concurrency - job_list.get_job_count()
 
-            acquired_jobs = await get_job(session, jobs_needed)
+                acquired_jobs = await get_job(session, jobs_needed)
 
-            for job in acquired_jobs:
-                await job_list.add_job(job)
+                if not acquired_jobs:
+                    log.debug("No jobs acquired.")
+                    continue
 
-            log.info(f"Jobs in queue: {job_list.get_job_count()}")
+                for job in acquired_jobs:
+                    await job_list.add_job(job)
 
-            await asyncio.sleep(5)  # yield control back to the event loop
+                log.info(f"Jobs in queue: {job_list.get_job_count()}")
+
+            except Exception as error:
+                log.error(f"Failed to get job. | Error Type: {type(error).__name__} | Error Message: {str(error)}")
+
+            finally:
+                await asyncio.sleep(5)  # yield control back to the event loop
 
     async def run_jobs(self, session: ClientSession, config: Dict[str, Any]):
         """
