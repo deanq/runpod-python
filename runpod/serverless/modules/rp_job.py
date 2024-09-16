@@ -83,14 +83,14 @@ async def get_job(session: ClientSession, num_jobs: int = 1) -> Optional[List[Di
             if isinstance(jobs, list):
                 return jobs
 
-            # empty
-            return []
-
     except asyncio.TimeoutError:
         log.debug("Timeout error, retrying.")
 
     except Exception as error:  # pylint: disable=broad-except
         log.error(f"Failed to get job. | Error Type: {type(error).__name__} | Error Message: {str(error)}")
+
+    # empty
+    return []
 
 
 async def run_job(handler: Callable, job: Dict[str, Any]) -> Dict[str, Any]:
