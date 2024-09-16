@@ -73,15 +73,10 @@ class JobScaler():
 
             acquired_jobs = await get_job(session, jobs_needed)
 
-            if not acquired_jobs:
-                log.info("No jobs acquired")
-                break
+            for job in acquired_jobs:
+                await job_list.add_job(job)
 
-            if acquired_jobs:
-                for job in acquired_jobs:
-                    await job_list.add_job(job)
-
-                log.info(f"Jobs in queue: {job_list.get_job_count()}")
+            log.info(f"Jobs in queue: {job_list.get_job_count()}")
 
             await asyncio.sleep(5)  # yield control back to the event loop
 
