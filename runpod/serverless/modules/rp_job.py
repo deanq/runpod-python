@@ -83,6 +83,9 @@ async def get_job(session: ClientSession, num_jobs: int = 1) -> Optional[List[Di
             if isinstance(jobs, list):
                 return jobs
 
+            # empty
+            return []
+
     except asyncio.TimeoutError:
         log.debug("Timeout error, retrying.")
 
