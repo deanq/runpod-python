@@ -8,7 +8,7 @@ from aiohttp import ClientError
 from aiohttp_retry import RetryClient, FibonacciRetry
 from runpod.http_client import ClientSession
 from runpod.serverless.modules.rp_logger import RunPodLogger
-from .worker_state import Jobs, WORKER_ID
+from .worker_state import JobsQueue, WORKER_ID
 
 JOB_DONE_URL_TEMPLATE = str(os.environ.get('RUNPOD_WEBHOOK_POST_OUTPUT', 'JOB_DONE_URL'))
 JOB_DONE_URL = JOB_DONE_URL_TEMPLATE.replace('$RUNPOD_POD_ID', WORKER_ID)
@@ -17,7 +17,7 @@ JOB_STREAM_URL_TEMPLATE = str(os.environ.get('RUNPOD_WEBHOOK_POST_STREAM', 'JOB_
 JOB_STREAM_URL = JOB_STREAM_URL_TEMPLATE.replace('$RUNPOD_POD_ID', WORKER_ID)
 
 log = RunPodLogger()
-job_list = Jobs()  # only used for local development
+job_list = JobsQueue()
 
 
 async def _transmit(client_session: ClientSession, url, job_data):
@@ -62,7 +62,7 @@ async def _handle_result(session: ClientSession, job_data, job, url_template, lo
     finally:
         #job_data status is used for local development with FastAPI
         if url_template == JOB_DONE_URL and job_data.get('status', None) != 'IN_PROGRESS':
-            job_list.remove_job(job["id"])
+            job_list.task_done()
             log.info("Finished.", job['id'])
 
 

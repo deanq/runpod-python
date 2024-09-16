@@ -150,8 +150,3 @@ class JobScaler():
 
         # Send the job result to SLS
         await send_result(session, job_result, job, is_stream=is_stream)
-
-        # log.error(f"Exception occurred while processing job {job}: {e}")
-
-        job_list.task_done()
-        log.debug(f"Job completed: {job}")
