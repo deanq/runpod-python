@@ -73,6 +73,10 @@ class JobScaler():
 
             acquired_jobs = await get_job(session, jobs_needed)
 
+            if not acquired_jobs:
+                log.info("No jobs acquired")
+                break
+
             if acquired_jobs:
                 for job in acquired_jobs:
                     await job_list.add_job(job)
