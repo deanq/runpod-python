@@ -40,8 +40,6 @@ class JobScaler():
         else:
             self.concurrency_modifier = concurrency_modifier
 
-        self.background_get_job_tasks = set()
-        self.job_history = []
         self.current_concurrency = 1
         self._is_alive = True
 
@@ -68,6 +66,8 @@ class JobScaler():
             self.current_concurrency = self.concurrency_modifier(self.current_concurrency)
             log.debug(f"Concurrency set to: {self.current_concurrency}")
 
+            log.info(f"Jobs in queue: {job_list.get_job_count()}")
+
             if job_list.get_job_count() < self.current_concurrency and self.is_alive():
                 log.debug("Job list is less than concurrency, getting more jobs.")
 
@@ -78,13 +78,11 @@ class JobScaler():
 
                 for job_future in asyncio.as_completed(tasks):
                     job = await job_future
-                    self.job_history.append(1 if job else 0)
+
                     job_list.add_job(job["id"])
                     log.debug("Request ID added.", job['id'])
 
                     if job:
                         yield job
-
-                log.info(f"Jobs in queue: {job_list.get_job_count()}")
 
             await asyncio.sleep(0)
