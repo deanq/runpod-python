@@ -117,40 +117,37 @@ class JobScaler():
         """
         Process an individual job. This function is run concurrently for multiple jobs.
         """
-        try:
-            log.debug(f"Processing job: {job}")
+        log.debug(f"Processing job: {job}")
 
-            if is_generator(config["handler"]):
-                is_stream = True
-                generator_output = run_job_generator(config["handler"], job)
-                log.debug("Handler is a generator, streaming results.", job['id'])
+        if is_generator(config["handler"]):
+            is_stream = True
+            generator_output = run_job_generator(config["handler"], job)
+            log.debug("Handler is a generator, streaming results.", job['id'])
 
-                job_result = {'output': []}
-                async for stream_output in generator_output:
-                    log.debug(f"Stream output: {stream_output}", job['id'])
-                    if 'error' in stream_output:
-                        job_result = stream_output
-                        break
-                    if config.get('return_aggregate_stream', False):
-                        job_result['output'].append(stream_output['output'])
+            job_result = {'output': []}
+            async for stream_output in generator_output:
+                log.debug(f"Stream output: {stream_output}", job['id'])
+                if 'error' in stream_output:
+                    job_result = stream_output
+                    break
+                if config.get('return_aggregate_stream', False):
+                    job_result['output'].append(stream_output['output'])
 
-                    await stream_result(session, stream_output, job)
-            else:
-                is_stream = False
-                job_result = await run_job(config["handler"], job)
+                await stream_result(session, stream_output, job)
+        else:
+            is_stream = False
+            job_result = await run_job(config["handler"], job)
 
-            # If refresh_worker is set, pod will be reset after job is complete.
-            if config.get("refresh_worker", False):
-                log.info("refresh_worker flag set, stopping pod after job.", job['id'])
-                job_result["stopPod"] = True
-                self.kill_worker()
+        # If refresh_worker is set, pod will be reset after job is complete.
+        if config.get("refresh_worker", False):
+            log.info("refresh_worker flag set, stopping pod after job.", job['id'])
+            job_result["stopPod"] = True
+            self.kill_worker()
 
-            # Send the job result to SLS
-            await send_result(session, job_result, job, is_stream=is_stream)
+        # Send the job result to SLS
+        await send_result(session, job_result, job, is_stream=is_stream)
 
-        except Exception as e:
-            log.error(f"Exception occurred while processing job {job}: {e}")
+        # log.error(f"Exception occurred while processing job {job}: {e}")
 
-        finally:
-            job_list.task_done()
-            log.debug(f"Job completed: {job}")
+        job_list.task_done()
+        log.debug(f"Job completed: {job}")
