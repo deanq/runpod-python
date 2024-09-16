@@ -79,6 +79,9 @@ class JobScaler():
                 for job_future in asyncio.as_completed(tasks):
                     job = await job_future
                     self.job_history.append(1 if job else 0)
+                    job_list.add_job(job["id"])
+                    log.debug("Request ID added.", job['id'])
+
                     if job:
                         yield job
 
