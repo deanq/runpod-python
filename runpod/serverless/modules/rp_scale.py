@@ -87,7 +87,7 @@ class JobScaler():
                 log.error(f"Failed to get job. | Error Type: {type(error).__name__} | Error Message: {str(error)}")
 
             finally:
-                await asyncio.sleep(5)  # yield control back to the event loop
+                await asyncio.sleep(0)  # yield control back to the event loop
 
     async def run_jobs(self, session: ClientSession, config: Dict[str, Any]):
         """
