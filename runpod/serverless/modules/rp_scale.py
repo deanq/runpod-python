@@ -151,13 +151,15 @@ class JobScaler:
                     acquired_jobs = await asyncio.wait_for(
                         get_job(session, jobs_needed), timeout=30
                     )
+
+                    if not acquired_jobs:
+                        span.add_event("acquired no jobs", {"jobs.acquired": 0})
+                        log.debug("JobScaler.get_jobs | No jobs acquired.")
+                        continue
+
                     span.add_event(
                         "acquired jobs", {"jobs.acquired": len(acquired_jobs)}
                     )
-
-                    if not acquired_jobs:
-                        log.debug("JobScaler.get_jobs | No jobs acquired.")
-                        continue
 
                     for job in acquired_jobs:
                         await job_list.add_job(job)
@@ -169,14 +171,18 @@ class JobScaler:
 
                 except TooManyRequests as error:
                     span.record_exception(error)
-                    log.debug(f"JobScaler.get_jobs | Too many requests. Debounce for 5 seconds.")
+                    log.debug(
+                        f"JobScaler.get_jobs | Too many requests. Debounce for 5 seconds."
+                    )
                     await asyncio.sleep(5)  # debounce for 5 seconds
                 except asyncio.CancelledError as error:
                     span.record_exception(error)
                     log.debug("JobScaler.get_jobs | Request was cancelled.")
                 except TimeoutError as error:
                     span.record_exception(error)
-                    log.debug("JobScaler.get_jobs | Job acquisition timed out. Retrying.")
+                    log.debug(
+                        "JobScaler.get_jobs | Job acquisition timed out. Retrying."
+                    )
                 except TypeError as error:
                     span.record_exception(error)
                     log.debug(f"JobScaler.get_jobs | Unexpected error: {error}.")
