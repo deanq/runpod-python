@@ -124,8 +124,8 @@ class JobScaler:
 
         Adds jobs to the JobsQueue
         """
-        while self.is_alive():
-            with tracer.start_as_current_span("JobScaler.get_jobs") as span:
+        with tracer.start_as_current_span("JobScaler.get_jobs") as span:
+            while self.is_alive():
                 self.current_concurrency = self.concurrency_modifier(
                     self.current_concurrency
                 )
@@ -136,7 +136,7 @@ class JobScaler:
                     await asyncio.sleep(1)  # don't go rapidly
                     continue
                 
-                span.set_attributes({
+                span.add_event("getting jobs", {
                     "jobs.current_concurrency": self.current_concurrency,
                     "jobs.in_progress": job_progress.get_job_count(),
                     "jobs.needed": jobs_needed,
@@ -147,7 +147,7 @@ class JobScaler:
                     acquired_jobs = await asyncio.wait_for(
                         get_job(session, jobs_needed), timeout=30
                     )
-                    span.set_attribute("jobs.acquired", len(acquired_jobs))
+                    span.add_event("acquired jobs", {"jobs.acquired": len(acquired_jobs)})
 
                     if not acquired_jobs:
                         log.debug("JobScaler.get_jobs | No jobs acquired.")
@@ -156,7 +156,7 @@ class JobScaler:
                     for job in acquired_jobs:
                         await job_list.add_job(job)
 
-                    span.set_attribute("jobs.in_queue", len(job_list.get_job_count()))
+                    span.add_event("queued jobs", {"jobs.in_queue", job_list.get_job_count()})
                     log.info(f"Jobs in queue: {job_list.get_job_count()}")
 
                 except TooManyRequests as error:
@@ -189,8 +189,8 @@ class JobScaler:
         """
         tasks = []  # Store the tasks for concurrent job processing
 
-        while self.is_alive() or not job_list.empty():
-            with tracer.start_as_current_span("JobScaler.run_jobs") as span:
+        with tracer.start_as_current_span("JobScaler.run_jobs") as span:
+            while self.is_alive() or not job_list.empty():
                 # Fetch as many jobs as the concurrency allows
                 while len(tasks) < self.current_concurrency and not job_list.empty():
                     job = await job_list.get_job()
@@ -201,7 +201,7 @@ class JobScaler:
 
                 # Wait for any job to finish
                 if tasks:
-                    span.set_attribute("jobs.running", len(tasks))
+                    span.add_event("running jobs", {"jobs.running": len(tasks)})
                     log.info(f"Jobs in progress: {len(tasks)}")
 
                     done, pending = await asyncio.wait(
