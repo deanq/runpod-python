@@ -20,6 +20,13 @@ job_progress = JobsProgress()
 tracer = get_tracer(__name__)
 
 
+worker_attributes = {
+    "worker.hostname": os.getenv("RUNPOD_POD_HOSTNAME", "unknown"),
+    "worker.id": os.getenv("RUNPOD_POD_ID", "unknown"),
+    "endpoint.id": os.getenv("RUNPOD_ENDPOINT_ID", "unknown"),
+}
+
+
 def _default_concurrency_modifier(current_concurrency: int) -> int:
     """
     Default concurrency modifier.
@@ -57,23 +64,16 @@ class JobScaler:
         when the user sends a SIGTERM or SIGINT signal. This is typically
         the case when the worker is running in a container.
         """
-        with tracer.start_as_current_span("JobScaler.start") as span:
-            span.set_attributes({
-                "worker.hostname": os.getenv("RUNPOD_POD_HOSTNAME", "unknown"),
-                "worker.id": os.getenv("RUNPOD_POD_ID", "unknown"),
-                "endpoint.id": os.getenv("RUNPOD_ENDPOINT_ID", "unknown"),
-            })
+        try:
+            # Register signal handlers for graceful shutdown
+            signal.signal(signal.SIGTERM, self.handle_shutdown)
+            signal.signal(signal.SIGINT, self.handle_shutdown)
+        except ValueError:
+            log.warning("Signal handling is only supported in the main thread.")
 
-            try:
-                # Register signal handlers for graceful shutdown
-                signal.signal(signal.SIGTERM, self.handle_shutdown)
-                signal.signal(signal.SIGINT, self.handle_shutdown)
-            except ValueError:
-                log.warning("Signal handling is only supported in the main thread.")
-
-            # Start the main loop
-            # Run forever until the worker is signalled to shut down.
-            asyncio.run(self.run())
+        # Start the main loop
+        # Run forever until the worker is signalled to shut down.
+        asyncio.run(self.run())
 
     def handle_shutdown(self, signum, frame):
         """
@@ -91,17 +91,16 @@ class JobScaler:
         self.kill_worker()
 
     async def run(self):
-        with tracer.start_as_current_span("JobScaler.run"):
-            # Create an async session that will be closed when the worker is killed.
-            async with AsyncClientSession() as session:
-                # Create tasks for getting and running jobs.
-                jobtake_task = asyncio.create_task(self.get_jobs(session))
-                jobrun_task = asyncio.create_task(self.run_jobs(session))
+        # Create an async session that will be closed when the worker is killed.
+        async with AsyncClientSession() as session:
+            # Create tasks for getting and running jobs.
+            jobtake_task = asyncio.create_task(self.get_jobs(session))
+            jobrun_task = asyncio.create_task(self.run_jobs(session))
 
-                tasks = [jobtake_task, jobrun_task]
+            tasks = [jobtake_task, jobrun_task]
 
-                # Concurrently run both tasks and wait for both to finish.
-                await asyncio.gather(*tasks)
+            # Concurrently run both tasks and wait for both to finish.
+            await asyncio.gather(*tasks)
 
     def is_alive(self):
         """
@@ -124,30 +123,37 @@ class JobScaler:
 
         Adds jobs to the JobsQueue
         """
-        with tracer.start_as_current_span("JobScaler.get_jobs") as span:
-            while self.is_alive():
-                self.current_concurrency = self.concurrency_modifier(
-                    self.current_concurrency
-                )
+        while self.is_alive():
+            self.current_concurrency = self.concurrency_modifier(
+                self.current_concurrency
+            )
 
-                jobs_needed = self.current_concurrency - job_progress.get_job_count()
-                if jobs_needed <= 0:
-                    log.debug("JobScaler.get_jobs | Queue is full. Retrying soon.")
-                    await asyncio.sleep(1)  # don't go rapidly
-                    continue
-                
-                span.add_event("getting jobs", {
-                    "jobs.current_concurrency": self.current_concurrency,
-                    "jobs.in_progress": job_progress.get_job_count(),
-                    "jobs.needed": jobs_needed,
-                })
+            jobs_needed = self.current_concurrency - job_progress.get_job_count()
+            if jobs_needed <= 0:
+                log.debug("JobScaler.get_jobs | Queue is full. Retrying soon.")
+                await asyncio.sleep(1)  # don't go rapidly
+                continue
+
+            with tracer.start_as_current_span("JobScaler.get_jobs") as span:
+                span.set_attributes(worker_attributes)
 
                 try:
+                    span.add_event(
+                        "getting jobs",
+                        {
+                            "jobs.current_concurrency": self.current_concurrency,
+                            "jobs.in_progress": job_progress.get_job_count(),
+                            "jobs.needed": jobs_needed,
+                        },
+                    )
+
                     # Keep the connection to the blocking call up to 30 seconds
                     acquired_jobs = await asyncio.wait_for(
                         get_job(session, jobs_needed), timeout=30
                     )
-                    span.add_event("acquired jobs", {"jobs.acquired": len(acquired_jobs)})
+                    span.add_event(
+                        "acquired jobs", {"jobs.acquired": len(acquired_jobs)}
+                    )
 
                     if not acquired_jobs:
                         log.debug("JobScaler.get_jobs | No jobs acquired.")
@@ -156,7 +162,9 @@ class JobScaler:
                     for job in acquired_jobs:
                         await job_list.add_job(job)
 
-                    span.add_event("queued jobs", {"jobs.in_queue", job_list.get_job_count()})
+                    span.add_event(
+                        "queued jobs", {"jobs.in_queue", job_list.get_job_count()}
+                    )
                     log.info(f"Jobs in queue: {job_list.get_job_count()}")
 
                 except TooManyRequests as error:
@@ -189,30 +197,28 @@ class JobScaler:
         """
         tasks = []  # Store the tasks for concurrent job processing
 
-        with tracer.start_as_current_span("JobScaler.run_jobs") as span:
-            while self.is_alive() or not job_list.empty():
-                # Fetch as many jobs as the concurrency allows
-                while len(tasks) < self.current_concurrency and not job_list.empty():
-                    job = await job_list.get_job()
+        while self.is_alive() or not job_list.empty():
+            # Fetch as many jobs as the concurrency allows
+            while len(tasks) < self.current_concurrency and not job_list.empty():
+                job = await job_list.get_job()
 
-                    # Create a new task for each job and add it to the task list
-                    task = asyncio.create_task(self.handle_job(session, job))
-                    tasks.append(task)
+                # Create a new task for each job and add it to the task list
+                task = asyncio.create_task(self.handle_job(session, job))
+                tasks.append(task)
 
-                # Wait for any job to finish
-                if tasks:
-                    span.add_event("running jobs", {"jobs.running": len(tasks)})
-                    log.info(f"Jobs in progress: {len(tasks)}")
+            # Wait for any job to finish
+            if tasks:
+                log.info(f"Jobs in progress: {len(tasks)}")
 
-                    done, pending = await asyncio.wait(
-                        tasks, return_when=asyncio.FIRST_COMPLETED
-                    )
+                done, pending = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_COMPLETED
+                )
 
-                    # Remove completed tasks from the list
-                    tasks = [t for t in tasks if t not in done]
+                # Remove completed tasks from the list
+                tasks = [t for t in tasks if t not in done]
 
-                # Yield control back to the event loop
-                await asyncio.sleep(0)
+            # Yield control back to the event loop
+            await asyncio.sleep(0)
 
         # Ensure all remaining tasks finish before stopping
         await asyncio.gather(*tasks)
@@ -222,6 +228,7 @@ class JobScaler:
         Process an individual job. This function is run concurrently for multiple jobs.
         """
         with tracer.start_as_current_span("JobScaler.handle_job") as span:
+            span.set_attributes(worker_attributes)
             span.set_attribute("job.id", job.get("id"))
             span.set_attribute("request_id", job.get("id"))  # legacy
 
