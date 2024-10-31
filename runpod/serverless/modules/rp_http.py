@@ -5,6 +5,7 @@
 import json
 import os
 
+from opentelemetry.trace import get_tracer
 from aiohttp import ClientError
 from aiohttp_retry import FibonacciRetry, RetryClient
 
@@ -24,6 +25,7 @@ JOB_STREAM_URL_TEMPLATE = str(
 JOB_STREAM_URL = JOB_STREAM_URL_TEMPLATE.replace("$RUNPOD_POD_ID", WORKER_ID)
 
 log = RunPodLogger()
+tracer = get_tracer(__name__)
 
 
 async def _transmit(client_session: ClientSession, url, job_data):
@@ -44,8 +46,9 @@ async def _transmit(client_session: ClientSession, url, job_data):
         "raise_for_status": True,
     }
 
-    async with retry_client.post(url, **kwargs) as client_response:
-        await client_response.text()
+    with tracer.start_as_current_span("rp_http.transmit"):
+        async with retry_client.post(url, **kwargs) as client_response:
+            await client_response.text()
 
 
 async def _handle_result(
@@ -55,7 +58,7 @@ async def _handle_result(
     A helper function to handle the result, either for sending or streaming.
     """
     try:
-        session.headers["X-Request-ID"] = job["id"]
+        session.headers["X-Request-ID"] = job["id"]  # legacy
 
         serialized_job_data = json.dumps(job_data, ensure_ascii=False)
 
@@ -84,15 +87,17 @@ async def send_result(session, job_data, job, is_stream=False):
     """
     Return the job results.
     """
-    await _handle_result(
-        session, job_data, job, JOB_DONE_URL, "Results sent.", is_stream=is_stream
-    )
+    with tracer.start_as_current_span("rp_http.send_result"):
+        await _handle_result(
+            session, job_data, job, JOB_DONE_URL, "Results sent.", is_stream=is_stream
+        )
 
 
 async def stream_result(session, job_data, job):
     """
     Return the stream job results.
     """
-    await _handle_result(
-        session, job_data, job, JOB_STREAM_URL, "Intermediate results sent."
-    )
+    with tracer.start_as_current_span("rp_http.stream_result"):
+        await _handle_result(
+            session, job_data, job, JOB_STREAM_URL, "Intermediate results sent."
+        )

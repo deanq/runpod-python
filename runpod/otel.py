@@ -1,12 +1,16 @@
 import os
-import typing
-import aiohttp
-from requests import PreparedRequest, Response
 
 from opentelemetry import trace
-from opentelemetry.sdk.trace import Resource, TracerProvider, Span
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.resources import (
+    Resource,
+    SERVICE_NAME,
+    SERVICE_VERSION,
+    HOST_NAME,
+
+)
 
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
@@ -21,9 +25,10 @@ trace.set_tracer_provider(
     TracerProvider(
         resource=Resource.create(
             {
-                "service.name": "runpod-python-sdk",
-                "service.version": runpod_version,
                 "application": "runpod-serverless",
+                SERVICE_NAME: "runpod-python-sdk",
+                SERVICE_VERSION: runpod_version,
+                HOST_NAME: os.getenv("RUNPOD_POD_HOSTNAME"),
             }
         )
     )
@@ -51,38 +56,8 @@ AsyncioInstrumentor().instrument()
 
 
 # --- requests --- #
-def requests_request_hook(span: Span, request_obj: PreparedRequest):
-    pass
-
-
-def requests_response_hook(
-    span: Span, request_obj: PreparedRequest, response: Response
-):
-    pass
-
-
 RequestsInstrumentor().instrument()
 
 
 # --- aiohttp --- #
-def aiohttp_request_hook(span: Span, params: aiohttp.TraceRequestStartParams):
-    if span and span.is_recording():
-        span.set_attribute(
-            "custom_user_attribute_from_request_hook", "aiohttp_request_hook"
-        )
-
-
-def aiohttp_response_hook(
-    span: Span,
-    params: typing.Union[
-        aiohttp.TraceRequestEndParams,
-        aiohttp.TraceRequestExceptionParams,
-    ],
-):
-    if span and span.is_recording():
-        span.set_attribute(
-            "custom_user_attribute_from_response_hook", "aiohttp_response_hook"
-        )
-
-
 AioHttpClientInstrumentor().instrument()
