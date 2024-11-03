@@ -154,7 +154,7 @@ class JobScaler:
                     for job in acquired_jobs:
                         with tracer.start_as_current_span("queue_job", kind=SpanKind.PRODUCER) as job_span:
                             job_span.set_attribute("request_id", job.get("id"))
-                            job["trace"] = job_span.get_span_context()
+                            job["trace"] = job_span
                             await job_list.add_job(job)
 
                     # TODO: metrics {"jobs.queued", job_list.get_job_count()}
@@ -218,7 +218,8 @@ class JobScaler:
         """
         Process an individual job. This function is run concurrently for multiple jobs.
         """
-        with tracer.start_as_current_span("handle_job", context=job.get("trace"), kind=SpanKind.CONSUMER) as span:
+        context = job.get("trace").get_span_context()
+        with tracer.start_as_current_span("handle_job", context=context, kind=SpanKind.CONSUMER) as span:
             span.set_attribute("request_id", job.get("id"))
 
             job_progress.add(job)
