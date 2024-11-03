@@ -5,7 +5,7 @@
 import json
 import os
 
-from opentelemetry.trace import get_tracer
+from opentelemetry.trace import get_tracer, SpanKind
 from aiohttp import ClientError
 from aiohttp_retry import FibonacciRetry, RetryClient
 
@@ -46,9 +46,8 @@ async def _transmit(client_session: ClientSession, url, job_data):
         "raise_for_status": True,
     }
 
-    with tracer.start_as_current_span("rp_http.transmit"):
-        async with retry_client.post(url, **kwargs) as client_response:
-            await client_response.text()
+    async with retry_client.post(url, **kwargs) as client_response:
+        await client_response.text()
 
 
 async def _handle_result(
@@ -57,47 +56,48 @@ async def _handle_result(
     """
     A helper function to handle the result, either for sending or streaming.
     """
-    try:
-        session.headers["X-Request-ID"] = job["id"]  # legacy
+    with tracer.start_as_current_span("handle_result", kind=SpanKind.INTERNAL) as span:
+        span.set_attribute("request_id", job.get("id"))
 
-        serialized_job_data = json.dumps(job_data, ensure_ascii=False)
+        try:
+            serialized_job_data = json.dumps(job_data, ensure_ascii=False)
 
-        is_stream = "true" if is_stream else "false"
-        url = url_template.replace("$ID", job["id"]) + f"&isStream={is_stream}"
+            is_stream = "true" if is_stream else "false"
+            url = url_template.replace("$ID", job["id"]) + f"&isStream={is_stream}"
 
-        await _transmit(session, url, serialized_job_data)
-        log.debug(f"{log_message}", job["id"])
+            await _transmit(session, url, serialized_job_data)
+            log.debug(f"{log_message}", job["id"])
 
-    except ClientError as err:
-        log.error(f"Failed to return job results. | {err}", job["id"])
+        except ClientError as err:
+            span.record_exception(err)
+            log.error(f"Failed to return job results. | {err}", job["id"])
 
-    except (TypeError, RuntimeError) as err:
-        log.error(f"Error while returning job result. | {err}", job["id"])
+        except (TypeError, RuntimeError) as err:
+            span.record_exception(err)
+            log.error(f"Error while returning job result. | {err}", job["id"])
 
-    finally:
-        # job_data status is used for local development with FastAPI
-        if (
-            url_template == JOB_DONE_URL
-            and job_data.get("status", None) != "IN_PROGRESS"
-        ):
-            log.info("Finished.", job["id"])
+        finally:
+            # job_data status is used for local development with FastAPI
+            if (
+                url_template == JOB_DONE_URL
+                and job_data.get("status", None) != "IN_PROGRESS"
+            ):
+                log.info("Finished.", job["id"])
 
 
 async def send_result(session, job_data, job, is_stream=False):
     """
     Return the job results.
     """
-    with tracer.start_as_current_span("rp_http.send_result"):
-        await _handle_result(
-            session, job_data, job, JOB_DONE_URL, "Results sent.", is_stream=is_stream
-        )
+    await _handle_result(
+        session, job_data, job, JOB_DONE_URL, "Results sent.", is_stream=is_stream
+    )
 
 
 async def stream_result(session, job_data, job):
     """
     Return the stream job results.
     """
-    with tracer.start_as_current_span("rp_http.stream_result"):
-        await _handle_result(
-            session, job_data, job, JOB_STREAM_URL, "Intermediate results sent."
-        )
+    await _handle_result(
+        session, job_data, job, JOB_STREAM_URL, "Intermediate results sent."
+    )

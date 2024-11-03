@@ -7,7 +7,7 @@ import json
 import os
 import traceback
 from typing import Any, AsyncGenerator, Callable, Dict, Optional, Union, List
-from opentelemetry.trace import get_tracer
+from opentelemetry.trace import get_tracer, SpanKind
 
 from runpod.http_client import ClientSession, TooManyRequests
 from runpod.serverless.modules.rp_logger import RunPodLogger
@@ -107,11 +107,10 @@ async def get_job(
             return jobs
 
 
-async def handle_job(session: ClientSession, config: Dict[str, Any], job) -> dict:
+async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) -> dict:
     if is_generator(config["handler"]):
         is_stream = True
         generator_output = run_job_generator(config["handler"], job)
-        log.debug("Handler is a generator, streaming results.", job["id"])
 
         job_result = {"output": []}
         async for stream_output in generator_output:
@@ -162,9 +161,8 @@ async def run_job(handler: Callable, job: Dict[str, Any]) -> Dict[str, Any]:
     log.info("Started.", job["id"])
     run_result = {}
 
-    with tracer.start_as_current_span("rp_job.run_job") as span:
-        span.set_attribute("job.id", job.get("id"))
-        span.set_attribute("request_id", job.get("id"))  # legacy
+    with tracer.start_as_current_span("run_job", kind=SpanKind.INTERNAL) as span:
+        span.set_attribute("request_id", job.get("id"))
 
         try:
             handler_return = handler(job)
@@ -231,7 +229,9 @@ async def run_job_generator(
         job["id"],
     )
 
-    with tracer.start_as_current_span("rp_job.run_job_generator") as span:
+    with tracer.start_as_current_span("run_job_generator", kind=SpanKind.INTERNAL) as span:
+        span.set_attribute("request_id", job.get("id"))
+
         try:
             job_output = handler(job)
 

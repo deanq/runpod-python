@@ -7,7 +7,8 @@ import asyncio
 import os
 import signal
 from typing import Any, Dict
-from opentelemetry.trace import get_tracer
+from uuid import uuid1  # traceable to machine's MAC address + timestamp
+from opentelemetry.trace import get_tracer, SpanKind
 
 from ...http_client import AsyncClientSession, ClientSession, TooManyRequests
 from .rp_job import get_job, handle_job
@@ -18,13 +19,6 @@ log = RunPodLogger()
 job_list = JobsQueue()
 job_progress = JobsProgress()
 tracer = get_tracer(__name__)
-
-
-worker_attributes = {
-    "worker.hostname": os.getenv("RUNPOD_POD_HOSTNAME", "unknown"),
-    "worker.id": os.getenv("RUNPOD_POD_ID", "unknown"),
-    "endpoint.id": os.getenv("RUNPOD_ENDPOINT_ID", "unknown"),
-}
 
 
 def _default_concurrency_modifier(current_concurrency: int) -> int:
@@ -130,22 +124,20 @@ class JobScaler:
 
             jobs_needed = self.current_concurrency - job_progress.get_job_count()
             if jobs_needed <= 0:
-                log.debug("JobScaler.get_jobs | Queue is full. Retrying soon.")
+                log.debug("Queue is full. Retrying soon.")
                 await asyncio.sleep(1)  # don't go rapidly
                 continue
 
-            with tracer.start_as_current_span("JobScaler.get_jobs") as span:
-                span.set_attributes(worker_attributes)
+            with tracer.start_as_current_span("get_jobs", kind=SpanKind.CLIENT) as span:
+                span.set_attribute("batch_id", uuid1().hex)
 
                 try:
-                    span.add_event(
-                        "getting jobs",
-                        {
-                            "jobs.current_concurrency": self.current_concurrency,
-                            "jobs.in_progress": job_progress.get_job_count(),
-                            "jobs.needed": jobs_needed,
-                        },
-                    )
+                    # TODO: metrics
+                    # {
+                    #     "jobs.current_concurrency": self.current_concurrency,
+                    #     "jobs.in_progress": job_progress.get_job_count(),
+                    #     "jobs.needed": jobs_needed,
+                    # }
 
                     # Keep the connection to the blocking call up to 30 seconds
                     acquired_jobs = await asyncio.wait_for(
@@ -153,39 +145,30 @@ class JobScaler:
                     )
 
                     if not acquired_jobs:
-                        span.add_event("acquired no jobs", {"jobs.acquired": 0})
-                        log.debug("JobScaler.get_jobs | No jobs acquired.")
+                        span.add_event("No jobs acquired")
+                        log.debug("No jobs acquired")
                         continue
 
-                    span.add_event(
-                        "acquired jobs", {"jobs.acquired": len(acquired_jobs)}
-                    )
+                    span.set_attribute("jobs_acquired_count", len(acquired_jobs))
 
                     for job in acquired_jobs:
-                        await job_list.add_job(job)
+                        with tracer.start_as_current_span("queue_job", kind=SpanKind.PRODUCER) as job_span:
+                            job_span.set_attribute("request_id", job.get("id"))
+                            await job_list.add_job(job)
 
-                    span.add_event(
-                        "queued jobs", {"jobs.in_queue", job_list.get_job_count()}
-                    )
+                    # TODO: metrics {"jobs.queued", job_list.get_job_count()}
                     log.info(f"Jobs in queue: {job_list.get_job_count()}")
 
                 except TooManyRequests as error:
-                    span.record_exception(error)
-                    log.debug(
-                        f"JobScaler.get_jobs | Too many requests. Debounce for 5 seconds."
-                    )
+                    span.add_event("Too many requests. Debounce for 5 seconds.")
                     await asyncio.sleep(5)  # debounce for 5 seconds
                 except asyncio.CancelledError as error:
-                    span.record_exception(error)
-                    log.debug("JobScaler.get_jobs | Request was cancelled.")
+                    span.add_event("Request was cancelled")
                 except TimeoutError as error:
-                    span.record_exception(error)
-                    log.debug(
-                        "JobScaler.get_jobs | Job acquisition timed out. Retrying."
-                    )
+                    span.add_event("Job acquisition timed out")
                 except TypeError as error:
+                    # worker waking up produces a JSON error here
                     span.record_exception(error)
-                    log.debug(f"JobScaler.get_jobs | Unexpected error: {error}.")
                 except Exception as error:
                     span.record_exception(error)
                     log.error(
@@ -214,6 +197,7 @@ class JobScaler:
 
             # Wait for any job to finish
             if tasks:
+                # TODO: metrics {"jobs.in_progress", len(tasks)}
                 log.info(f"Jobs in progress: {len(tasks)}")
 
                 done, pending = await asyncio.wait(
@@ -233,18 +217,16 @@ class JobScaler:
         """
         Process an individual job. This function is run concurrently for multiple jobs.
         """
-        with tracer.start_as_current_span("JobScaler.handle_job") as span:
-            span.set_attributes(worker_attributes)
-            span.set_attribute("job.id", job.get("id"))
-            span.set_attribute("request_id", job.get("id"))  # legacy
+        with tracer.start_as_current_span("handle_job", kind=SpanKind.CONSUMER) as span:
+            span.set_attribute("request_id", job.get("id"))
 
-            log.debug(f"JobScaler.handle_job | {job}")
             job_progress.add(job)
 
             try:
                 await handle_job(session, self.config, job)
 
                 if self.config.get("refresh_worker", False):
+                    span.add_event("refresh_worker")
                     self.kill_worker()
 
             except Exception as err:

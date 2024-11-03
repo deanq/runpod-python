@@ -54,4 +54,4 @@ class SyncClientSession(requests.Session):
     def __init__(self):
         super().__init__()
         self.headers.update(get_auth_header())
-        RequestsInstrumentor().instrument_session(self)
+        RequestsInstrumentor().instrument(session=self)
