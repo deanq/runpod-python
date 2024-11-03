@@ -14,9 +14,6 @@ from opentelemetry.sdk.resources import (
 
 )
 
-from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
-from opentelemetry.instrumentation.threading import ThreadingInstrumentor
-from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
 
 from runpod.version import __version__ as runpod_version
 
@@ -43,15 +40,3 @@ if os.getenv("RUNPOD_LOG_LEVEL", "").lower() == "trace":
 
 if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
     tracer.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
-
-
-# --- threading --- #
-ThreadingInstrumentor().instrument()
-
-
-# --- urllib3 --- #
-URLLib3Instrumentor().instrument()
-
-
-# --- asyncio --- #
-AsyncioInstrumentor().instrument()
