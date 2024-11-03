@@ -8,7 +8,7 @@ import os
 import signal
 from typing import Any, Dict
 from uuid import uuid1  # traceable to machine's MAC address + timestamp
-from opentelemetry.trace import get_tracer, SpanKind
+from opentelemetry.trace import get_tracer, SpanKind, set_span_in_context, NonRecordingSpan
 
 from ...http_client import AsyncClientSession, ClientSession, TooManyRequests
 from .rp_job import get_job, handle_job
@@ -154,7 +154,7 @@ class JobScaler:
                     for job in acquired_jobs:
                         with tracer.start_as_current_span("queue_job", kind=SpanKind.PRODUCER) as job_span:
                             job_span.set_attribute("request_id", job.get("id"))
-                            job["trace"] = job_span
+                            job["context"] = job_span.get_span_context()
                             await job_list.add_job(job)
 
                     # TODO: metrics {"jobs.queued", job_list.get_job_count()}
@@ -218,7 +218,8 @@ class JobScaler:
         """
         Process an individual job. This function is run concurrently for multiple jobs.
         """
-        context = job.get("trace").get_span_context()
+        context = set_span_in_context(NonRecordingSpan(job["context"]))
+
         with tracer.start_as_current_span("handle_job", context=context, kind=SpanKind.CONSUMER) as span:
             span.set_attribute("request_id", job.get("id"))
 
