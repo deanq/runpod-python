@@ -7,14 +7,14 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExport
 from opentelemetry.sdk.resources import (
     Resource,
     SERVICE_NAME,
+    SERVICE_NAMESPACE,
+    SERVICE_INSTANCE_ID,
     SERVICE_VERSION,
     HOST_NAME,
 
 )
 
-from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.instrumentation.threading import ThreadingInstrumentor
 from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
 
@@ -27,6 +27,8 @@ trace.set_tracer_provider(
             {
                 "application": "runpod-serverless",
                 SERVICE_NAME: "runpod-python-sdk",
+                SERVICE_NAMESPACE: os.getenv("RUNPOD_ENDPOINT_ID"),
+                SERVICE_INSTANCE_ID: os.getenv("RUNPOD_POD_ID"),
                 SERVICE_VERSION: runpod_version,
                 HOST_NAME: os.getenv("RUNPOD_POD_HOSTNAME"),
             }
@@ -53,11 +55,3 @@ URLLib3Instrumentor().instrument()
 
 # --- asyncio --- #
 AsyncioInstrumentor().instrument()
-
-
-# --- requests --- #
-RequestsInstrumentor().instrument()
-
-
-# --- aiohttp --- #
-AioHttpClientInstrumentor().instrument()
