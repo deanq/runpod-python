@@ -56,7 +56,7 @@ async def _handle_result(
     """
     A helper function to handle the result, either for sending or streaming.
     """
-    with tracer.start_as_current_span("handle_result", kind=SpanKind.INTERNAL) as span:
+    with tracer.start_as_current_span("handle_result", kind=SpanKind.SERVER) as span:
         span.set_attribute("request_id", job.get("id"))
 
         try:
