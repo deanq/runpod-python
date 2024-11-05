@@ -11,9 +11,10 @@ from opentelemetry.sdk.resources import (
     SERVICE_INSTANCE_ID,
     SERVICE_VERSION,
     HOST_NAME,
-
 )
 
+RUNPOD_ENDPOINT_ID = "runpod.endpoint_id"
+RUNPOD_POD_ID = "runpod.pod_id"
 
 from runpod.version import __version__ as runpod_version
 
@@ -25,7 +26,9 @@ trace.set_tracer_provider(
                 "application": "runpod-serverless",
                 SERVICE_NAME: "runpod-python-sdk",
                 SERVICE_NAMESPACE: os.getenv("RUNPOD_ENDPOINT_ID"),
+                RUNPOD_ENDPOINT_ID: os.getenv("RUNPOD_ENDPOINT_ID"),
                 SERVICE_INSTANCE_ID: os.getenv("RUNPOD_POD_ID"),
+                RUNPOD_POD_ID: os.getenv("RUNPOD_POD_ID"),
                 SERVICE_VERSION: runpod_version,
                 HOST_NAME: os.getenv("RUNPOD_POD_HOSTNAME"),
             }
