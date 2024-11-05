@@ -8,6 +8,7 @@ import threading
 import time
 
 import requests
+from opentelemetry import trace
 from urllib3.util.retry import Retry
 
 from runpod.http_client import SyncClientSession
@@ -17,6 +18,7 @@ from runpod.version import __version__ as runpod_version
 
 log = RunPodLogger()
 jobs = JobsProgress()  # Contains the list of jobs that are currently running.
+tracer = trace.get_tracer(__name__)
 
 
 class Heartbeat:
@@ -83,12 +85,16 @@ class Heartbeat:
             if test:
                 return
 
+    @tracer.start_as_current_span("send_ping")
     def _send_ping(self):
         """
         Sends a heartbeat to the Runpod server.
         """
         job_ids = jobs.get_job_list()
         ping_params = {"job_id": job_ids, "runpod_version": runpod_version}
+
+        span = trace.get_current_span()
+        span.set_attribute("job_id", job_ids)
 
         try:
             result = self._session.get(
@@ -100,4 +106,5 @@ class Heartbeat:
             )
 
         except requests.RequestException as err:
+            span.record_exception(err)
             log.error(f"Ping Request Error: {err}, attempting to restart ping.")
