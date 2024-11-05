@@ -8,21 +8,16 @@ import os
 import pathlib
 import typing
 from ctypes import CDLL, byref, c_char_p, c_int
+from opentelemetry import trace
 from typing import Any, Callable, Dict, List, Optional
 from uuid import uuid1  # traceable to machine's MAC address + timestamp
-from opentelemetry.trace import (
-    get_tracer,
-    set_span_in_context,
-    SpanKind,
-    NonRecordingSpan,
-)
 
 from runpod.serverless.modules import rp_job
 from runpod.serverless.modules.rp_logger import RunPodLogger
 from runpod.version import __version__ as runpod_version
 
 log = RunPodLogger()
-tracer = get_tracer(__name__)
+tracer = trace.get_tracer(__name__)
 
 # _runpod_sls_get_jobs status codes
 STILL_WAITING = 0 
@@ -192,44 +187,46 @@ class Hook:  # pylint: disable=too-many-instance-attributes
             )
         )
 
+    @tracer.start_as_current_span("handle_result", kind=trace.SpanKind.SERVER)
     async def stream_output(self, job_id: str, job_output: bytes) -> bool:
         """
         send part of a streaming result to AI-API.
         """
-        with tracer.start_as_current_span("handle_result", kind=SpanKind.SERVER) as span:
-            span.set_attribute("request_id", job_id)
-            span.set_attribute("is_stream", True)
+        span = trace.get_current_span()
+        span.set_attribute("request_id", job_id)
+        span.set_attribute("is_stream", True)
 
-            json_data = self._json_serialize_job_data(job_output)
-            id_bytes = job_id.encode("utf-8")
-            return bool(
-                self._stream_output(
-                    c_char_p(id_bytes),
-                    c_int(len(id_bytes)),
-                    c_char_p(json_data),
-                    c_int(len(json_data)),
-                )
+        json_data = self._json_serialize_job_data(job_output)
+        id_bytes = job_id.encode("utf-8")
+        return bool(
+            self._stream_output(
+                c_char_p(id_bytes),
+                c_int(len(id_bytes)),
+                c_char_p(json_data),
+                c_int(len(json_data)),
             )
+        )
 
+    @tracer.start_as_current_span("handle_result", kind=trace.SpanKind.SERVER)
     def post_output(self, job_id: str, job_output: bytes) -> bool:
         """
         send the result of a job to AI-API.
         Returns True if the task was successfully stored, False otherwise.
         """
-        with tracer.start_as_current_span("handle_result", kind=SpanKind.SERVER) as span:
-            span.set_attribute("request_id", job_id)
-            span.set_attribute("is_stream", False)
+        span = trace.get_current_span()
+        span.set_attribute("request_id", job_id)
+        span.set_attribute("is_stream", False)
 
-            json_data = self._json_serialize_job_data(job_output)
-            id_bytes = job_id.encode("utf-8")
-            return bool(
-                self._post_output(
-                    c_char_p(id_bytes),
-                    c_int(len(id_bytes)),
-                    c_char_p(json_data),
-                    c_int(len(json_data)),
-                )
+        json_data = self._json_serialize_job_data(job_output)
+        id_bytes = job_id.encode("utf-8")
+        return bool(
+            self._post_output(
+                c_char_p(id_bytes),
+                c_int(len(id_bytes)),
+                c_char_p(json_data),
+                c_int(len(json_data)),
             )
+        )
 
     def finish_stream(self, job_id: str) -> bool:
         """
@@ -248,9 +245,9 @@ async def _process_job(
 
     result = {}
 
-    context = set_span_in_context(NonRecordingSpan(job["context"]))
+    context = trace.set_span_in_context(trace.NonRecordingSpan(job["context"]))
 
-    with tracer.start_as_current_span("handle_job", context=context, kind=SpanKind.CONSUMER) as span:
+    with tracer.start_as_current_span("handle_job", context=context, kind=trace.SpanKind.CONSUMER) as span:
         span.set_attribute("request_id", job.get("id"))
 
         try:
@@ -305,7 +302,7 @@ async def run(config: Dict[str, Any]) -> None:
 
     serverless_hook = Hook()
     while True:
-        with tracer.start_as_current_span("get_jobs", kind=SpanKind.CLIENT) as span:
+        with tracer.start_as_current_span("get_jobs", kind=trace.SpanKind.CLIENT) as span:
             span.set_attribute("runpod.sls_core_enabled", True)
             span.set_attribute("batch_id", uuid1().hex)
 
@@ -325,7 +322,7 @@ async def run(config: Dict[str, Any]) -> None:
             span.set_attribute("jobs_acquired_count", len(jobs))
 
             for job in jobs:
-                with tracer.start_as_current_span("queue_job", kind=SpanKind.PRODUCER) as job_span:
+                with tracer.start_as_current_span("queue_job", kind=trace.SpanKind.PRODUCER) as job_span:
                     job_span.set_attribute("request_id", job.get("id"))
                     job["context"] = job_span.get_span_context()
                     asyncio.create_task(

@@ -6,8 +6,8 @@ import inspect
 import json
 import os
 import traceback
+from opentelemetry import trace
 from typing import Any, AsyncGenerator, Callable, Dict, Optional, Union, List
-from opentelemetry.trace import get_tracer, SpanKind
 
 from runpod.http_client import ClientSession, TooManyRequests
 from runpod.serverless.modules.rp_logger import RunPodLogger
@@ -23,7 +23,7 @@ JOB_GET_URL = str(os.environ.get("RUNPOD_WEBHOOK_GET_JOB")).replace("$ID", WORKE
 
 log = RunPodLogger()
 job_progress = JobsProgress()
-tracer = get_tracer(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 def _job_get_url(batch_size: int = 1):
@@ -147,6 +147,7 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
     await send_result(session, job_result, job, is_stream=is_stream)
 
 
+@tracer.start_as_current_span("run_job")
 async def run_job(handler: Callable, job: Dict[str, Any]) -> Dict[str, Any]:
     """
     Run the job using the handler.
@@ -158,64 +159,65 @@ async def run_job(handler: Callable, job: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: The result of running the job.
     """
+    span = trace.get_current_span()
+    span.set_attribute("request_id", job.get("id"))
+
     log.info("Started.", job["id"])
     run_result = {}
 
-    with tracer.start_as_current_span("run_job", kind=SpanKind.INTERNAL) as span:
-        span.set_attribute("request_id", job.get("id"))
+    try:
+        handler_return = handler(job)
+        job_output = (
+            await handler_return
+            if inspect.isawaitable(handler_return)
+            else handler_return
+        )
 
-        try:
-            handler_return = handler(job)
-            job_output = (
-                await handler_return
-                if inspect.isawaitable(handler_return)
-                else handler_return
-            )
+        log.debug(f"Handler output: {job_output}", job["id"])
 
-            log.debug(f"Handler output: {job_output}", job["id"])
+        if isinstance(job_output, dict):
+            error_msg = job_output.pop("error", None)
+            refresh_worker = job_output.pop("refresh_worker", None)
+            run_result["output"] = job_output
 
-            if isinstance(job_output, dict):
-                error_msg = job_output.pop("error", None)
-                refresh_worker = job_output.pop("refresh_worker", None)
-                run_result["output"] = job_output
+            if error_msg:
+                run_result["error"] = error_msg
+            if refresh_worker:
+                run_result["stopPod"] = True
 
-                if error_msg:
-                    run_result["error"] = error_msg
-                if refresh_worker:
-                    run_result["stopPod"] = True
+        elif isinstance(job_output, bool):
+            run_result = {"output": job_output}
 
-            elif isinstance(job_output, bool):
-                run_result = {"output": job_output}
+        else:
+            run_result = {"output": job_output}
 
-            else:
-                run_result = {"output": job_output}
+        if run_result.get("output") == {}:
+            run_result.pop("output")
 
-            if run_result.get("output") == {}:
-                run_result.pop("output")
+        check_return_size(run_result)  # Checks the size of the return body.
 
-            check_return_size(run_result)  # Checks the size of the return body.
+    except Exception as err:
+        span.record_exception(err)
+        error_info = {
+            "error_type": str(type(err)),
+            "error_message": str(err),
+            "error_traceback": traceback.format_exc(),
+            "hostname": os.environ.get("RUNPOD_POD_HOSTNAME", "unknown"),
+            "worker_id": os.environ.get("RUNPOD_POD_ID", "unknown"),
+            "runpod_version": runpod_version,
+        }
 
-        except Exception as err:
-            span.record_exception(err)
-            error_info = {
-                "error_type": str(type(err)),
-                "error_message": str(err),
-                "error_traceback": traceback.format_exc(),
-                "hostname": os.environ.get("RUNPOD_POD_HOSTNAME", "unknown"),
-                "worker_id": os.environ.get("RUNPOD_POD_ID", "unknown"),
-                "runpod_version": runpod_version,
-            }
+        log.error("Captured Handler Exception", job["id"])
+        log.error(json.dumps(error_info, indent=4))
+        run_result = {"error": json.dumps(error_info)}
 
-            log.error("Captured Handler Exception", job["id"])
-            log.error(json.dumps(error_info, indent=4))
-            run_result = {"error": json.dumps(error_info)}
-
-        finally:
-            log.debug(f"run_job return: {run_result}", job["id"])
+    finally:
+        log.debug(f"run_job return: {run_result}", job["id"])
 
     return run_result
 
 
+@tracer.start_as_current_span("run_job_generator")
 async def run_job_generator(
     handler: Callable, job: Dict[str, Any]
 ) -> AsyncGenerator[Dict[str, Union[str, Any]], None]:
@@ -223,30 +225,30 @@ async def run_job_generator(
     Run generator job used to stream output.
     Yields output partials from the generator.
     """
+    span = trace.get_current_span()
+    span.set_attribute("request_id", job.get("id"))
+
     is_async_gen = inspect.isasyncgenfunction(handler)
     log.debug(
         "Using Async Generator" if is_async_gen else "Using Standard Generator",
         job["id"],
     )
 
-    with tracer.start_as_current_span("run_job_generator", kind=SpanKind.INTERNAL) as span:
-        span.set_attribute("request_id", job.get("id"))
+    try:
+        job_output = handler(job)
 
-        try:
-            job_output = handler(job)
+        if is_async_gen:
+            async for output_partial in job_output:
+                log.debug(f"Async Generator output: {output_partial}", job["id"])
+                yield {"output": output_partial}
+        else:
+            for output_partial in job_output:
+                log.debug(f"Generator output: {output_partial}", job["id"])
+                yield {"output": output_partial}
 
-            if is_async_gen:
-                async for output_partial in job_output:
-                    log.debug(f"Async Generator output: {output_partial}", job["id"])
-                    yield {"output": output_partial}
-            else:
-                for output_partial in job_output:
-                    log.debug(f"Generator output: {output_partial}", job["id"])
-                    yield {"output": output_partial}
-
-        except Exception as err:
-            span.record_exception(err)
-            log.error(err, job["id"])
-            yield {"error": f"handler: {str(err)} \ntraceback: {traceback.format_exc()}"}
-        finally:
-            log.info("Finished running generator.", job["id"])
+    except Exception as err:
+        span.record_exception(err)
+        log.error(err, job["id"])
+        yield {"error": f"handler: {str(err)} \ntraceback: {traceback.format_exc()}"}
+    finally:
+        log.info("Finished running generator.", job["id"])
