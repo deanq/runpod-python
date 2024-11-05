@@ -17,7 +17,7 @@ from runpod.serverless.modules.worker_state import WORKER_ID, JobsProgress
 from runpod.version import __version__ as runpod_version
 
 log = RunPodLogger()
-jobs = JobsProgress()  # Contains the list of jobs that are currently running.
+job_progress = JobsProgress()  # Contains the list of jobs that are currently running.
 tracer = trace.get_tracer(__name__)
 
 
@@ -90,11 +90,11 @@ class Heartbeat:
         """
         Sends a heartbeat to the Runpod server.
         """
-        job_ids = jobs.get_job_list()
-        ping_params = {"job_id": job_ids, "runpod_version": runpod_version}
+        job_ids = job_progress.get_job_list()
+        ping_params = {"job_id": ",".join(job_ids), "runpod_version": runpod_version}
 
         span = trace.get_current_span()
-        span.set_attribute("job_id", job_ids)
+        span.set_attribute("request_id", job_ids)
 
         try:
             result = self._session.get(

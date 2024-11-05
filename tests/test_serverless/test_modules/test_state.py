@@ -154,23 +154,6 @@ class TestJobsQueue(unittest.IsolatedAsyncioTestCase):
         assert next_job not in self.jobs
         assert next_job == job2
 
-    async def test_get_job_list(self):
-        """
-        Tests if get_job_list() returns comma-separated IDs
-        """
-        self.assertTrue(self.jobs.get_job_list() is None)
-
-        job1 = {"id": "123"}
-        await self.jobs.add_job(job1)
-
-        job2 = {"id": "456"}
-        await self.jobs.add_job(job2)
-
-        assert self.jobs.get_job_count() == 2
-        assert job1 in self.jobs
-        assert job2 in self.jobs
-        assert self.jobs.get_job_list() in ["123,456", "456,123"]
-
 
 class TestJobsProgress(unittest.TestCase):
     """Tests for JobsProgress class"""
@@ -223,7 +206,7 @@ class TestJobsProgress(unittest.TestCase):
         assert job1 in self.jobs
 
     def test_get_job_list(self):
-        self.assertTrue(self.jobs.get_job_list() is None)
+        assert not self.jobs.get_job_list()
 
         job1 = {"id": "123"}
         self.jobs.add(job1)
@@ -232,4 +215,4 @@ class TestJobsProgress(unittest.TestCase):
         self.jobs.add(job2)
 
         assert self.jobs.get_job_count() == 2
-        assert self.jobs.get_job_list() in ["123,456", "456,123"]
+        assert not self.jobs.get_job_list().difference(("123","456",))

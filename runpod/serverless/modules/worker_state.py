@@ -97,11 +97,11 @@ class JobsProgress(set):
 
     def remove(self, element: Any):
         """
-        Adds a Job object to the set.
+        Removes a Job object from the set.
 
-        If the added element is a string, then `Job(id=element)` is added
+        If the element is a string, then `Job(id=element)` is recognized
         
-        If the added element is a dict, that `Job(**element)` is added
+        If the element is a dict, that `Job(**element)` is recognized
         """
         if isinstance(element, str):
             element = Job(id=element)
@@ -126,14 +126,14 @@ class JobsProgress(set):
             if job == element:
                 return job
 
-    def get_job_list(self) -> str:
+    def get_job_list(self) -> set[str]:
         """
-        Returns the list of job IDs as comma-separated string.
+        Returns the list of job IDs
         """
         if not self.get_job_count():
-            return None
+            return set()
 
-        return ",".join(str(job) for job in self)
+        return set(str(job) for job in self)
 
     def get_job_count(self) -> int:
         """
@@ -174,15 +174,6 @@ class JobsQueue(Queue):
         Note: make sure to call `.task_done()` when processing the job is finished.
         """
         return await self.get()
-
-    def get_job_list(self) -> Optional[str]:
-        """
-        Returns the comma-separated list of jobs as a string. (read-only)
-        """
-        if self.empty():
-            return None
-
-        return ",".join(job.get("id") for job in self)
 
     def get_job_count(self) -> int:
         """
