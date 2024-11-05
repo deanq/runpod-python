@@ -4,11 +4,15 @@ Provides the functionality for scaling the runpod serverless worker.
 """
 
 import asyncio
-import os
 import signal
 from typing import Any, Dict
 from uuid import uuid1  # traceable to machine's MAC address + timestamp
-from opentelemetry.trace import get_tracer, SpanKind, set_span_in_context, NonRecordingSpan
+from opentelemetry.trace import (
+    get_tracer,
+    set_span_in_context,
+    SpanKind,
+    NonRecordingSpan,
+)
 
 from ...http_client import AsyncClientSession, ClientSession, TooManyRequests
 from .rp_job import get_job, handle_job
@@ -152,7 +156,9 @@ class JobScaler:
                     span.set_attribute("jobs_acquired_count", len(acquired_jobs))
 
                     for job in acquired_jobs:
-                        with tracer.start_as_current_span("queue_job", kind=SpanKind.PRODUCER) as job_span:
+                        with tracer.start_as_current_span(
+                            "queue_job", kind=SpanKind.PRODUCER
+                        ) as job_span:
                             job_span.set_attribute("request_id", job.get("id"))
                             job["context"] = job_span.get_span_context()
                             await job_list.add_job(job)
@@ -220,7 +226,9 @@ class JobScaler:
         """
         context = set_span_in_context(NonRecordingSpan(job["context"]))
 
-        with tracer.start_as_current_span("handle_job", context=context, kind=SpanKind.CONSUMER) as span:
+        with tracer.start_as_current_span(
+            "handle_job", context=context, kind=SpanKind.CONSUMER
+        ) as span:
             span.set_attribute("request_id", job.get("id"))
 
             job_progress.add(job)
