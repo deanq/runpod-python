@@ -9,12 +9,20 @@ import pathlib
 import typing
 from ctypes import CDLL, byref, c_char_p, c_int
 from typing import Any, Callable, Dict, List, Optional
+from uuid import uuid1  # traceable to machine's MAC address + timestamp
+from opentelemetry.trace import (
+    get_tracer,
+    set_span_in_context,
+    SpanKind,
+    NonRecordingSpan,
+)
 
 from runpod.serverless.modules import rp_job
 from runpod.serverless.modules.rp_logger import RunPodLogger
 from runpod.version import __version__ as runpod_version
 
 log = RunPodLogger()
+tracer = get_tracer(__name__)
 
 # _runpod_sls_get_jobs status codes
 STILL_WAITING = 0 
@@ -188,32 +196,40 @@ class Hook:  # pylint: disable=too-many-instance-attributes
         """
         send part of a streaming result to AI-API.
         """
-        json_data = self._json_serialize_job_data(job_output)
-        id_bytes = job_id.encode("utf-8")
-        return bool(
-            self._stream_output(
-                c_char_p(id_bytes),
-                c_int(len(id_bytes)),
-                c_char_p(json_data),
-                c_int(len(json_data)),
+        with tracer.start_as_current_span("handle_result", kind=SpanKind.SERVER) as span:
+            span.set_attribute("request_id", job_id)
+            span.set_attribute("is_stream", True)
+
+            json_data = self._json_serialize_job_data(job_output)
+            id_bytes = job_id.encode("utf-8")
+            return bool(
+                self._stream_output(
+                    c_char_p(id_bytes),
+                    c_int(len(id_bytes)),
+                    c_char_p(json_data),
+                    c_int(len(json_data)),
+                )
             )
-        )
 
     def post_output(self, job_id: str, job_output: bytes) -> bool:
         """
         send the result of a job to AI-API.
         Returns True if the task was successfully stored, False otherwise.
         """
-        json_data = self._json_serialize_job_data(job_output)
-        id_bytes = job_id.encode("utf-8")
-        return bool(
-            self._post_output(
-                c_char_p(id_bytes),
-                c_int(len(id_bytes)),
-                c_char_p(json_data),
-                c_int(len(json_data)),
+        with tracer.start_as_current_span("handle_result", kind=SpanKind.SERVER) as span:
+            span.set_attribute("request_id", job_id)
+            span.set_attribute("is_stream", False)
+
+            json_data = self._json_serialize_job_data(job_output)
+            id_bytes = job_id.encode("utf-8")
+            return bool(
+                self._post_output(
+                    c_char_p(id_bytes),
+                    c_int(len(id_bytes)),
+                    c_char_p(json_data),
+                    c_int(len(json_data)),
+                )
             )
-        )
 
     def finish_stream(self, job_id: str) -> bool:
         """
@@ -225,46 +241,53 @@ class Hook:  # pylint: disable=too-many-instance-attributes
 
 # -------------------------------- Process Job ------------------------------- #
 async def _process_job(
-    config: Dict[str, Any], job: Dict[str, Any], hook
+    config: Dict[str, Any], job: Dict[str, Any], hook: Hook
 ) -> Dict[str, Any]:
     """Process a single job."""
     handler = config["handler"]
 
     result = {}
-    try:
-        if inspect.isgeneratorfunction(handler) or inspect.isasyncgenfunction(handler):
-            log.debug("SLS Core | Running job as a generator.")
-            generator_output = rp_job.run_job_generator(handler, job)
-            aggregated_output: dict[str, typing.Any] = {"output": []}
 
-            async for part in generator_output:
-                log.trace(f"SLS Core | Streaming output: {part}", job["id"])
+    context = set_span_in_context(NonRecordingSpan(job["context"]))
 
-                if "error" in part:
-                    aggregated_output = part
-                    break
-                if config.get("return_aggregate_stream", False):
-                    aggregated_output["output"].append(part["output"])
+    with tracer.start_as_current_span("handle_job", context=context, kind=SpanKind.CONSUMER) as span:
+        span.set_attribute("request_id", job.get("id"))
 
-                await hook.stream_output(job["id"], part)
+        try:
+            if inspect.isgeneratorfunction(handler) or inspect.isasyncgenfunction(handler):
+                log.debug("SLS Core | Running job as a generator.")
+                generator_output = rp_job.run_job_generator(handler, job)
+                aggregated_output: dict[str, typing.Any] = {"output": []}
 
-            log.debug("SLS Core | Finished streaming output.", job["id"])
-            hook.finish_stream(job["id"])
-            result = aggregated_output
+                async for part in generator_output:
+                    log.trace(f"SLS Core | Streaming output: {part}", job["id"])
 
-        else:
-            log.debug("SLS Core | Running job as a standard function.")
-            result = await rp_job.run_job(handler, job)
-            result = result.get("output", result)
+                    if "error" in part:
+                        aggregated_output = part
+                        break
+                    if config.get("return_aggregate_stream", False):
+                        aggregated_output["output"].append(part["output"])
 
-    except Exception as err:  # pylint: disable=broad-except
-        log.error(f"SLS Core | Error running job: {err}", job["id"])
-        result = {"error": str(err)}
+                    await hook.stream_output(job["id"], part)
 
-    finally:
-        log.debug(f"SLS Core | Posting output: {result}", job["id"])
-        hook.post_output(job["id"], result)
-        return result
+                log.debug("SLS Core | Finished streaming output.", job["id"])
+                hook.finish_stream(job["id"])
+                result = aggregated_output
+
+            else:
+                log.debug("SLS Core | Running job as a standard function.")
+                result = await rp_job.run_job(handler, job)
+                result = result.get("output", result)
+
+        except Exception as err:  # pylint: disable=broad-except
+            span.record_exception(err)
+            log.error(f"SLS Core | Error running job: {err}", job["id"])
+            result = {"error": str(err)}
+
+        finally:
+            log.debug(f"SLS Core | Posting output: {result}", job["id"])
+            hook.post_output(job["id"], result)
+            return result
 
 
 # ---------------------------------------------------------------------------- #
@@ -282,24 +305,35 @@ async def run(config: Dict[str, Any]) -> None:
 
     serverless_hook = Hook()
     while True:
-        try:
-            jobs = serverless_hook.get_jobs(max_concurrency, max_jobs)
-        except SlsCoreError as err:
-            log.error(f"SLS Core | Error getting jobs: {err}")
-            await asyncio.sleep(0.2) # sleep for a bit before trying again
-            continue
+        with tracer.start_as_current_span("get_jobs", kind=SpanKind.CLIENT) as span:
+            span.set_attribute("runpod.sls_core_enabled", True)
+            span.set_attribute("batch_id", uuid1().hex)
 
-        if len(jobs) == 0 or jobs is None:
+            try:
+                jobs = serverless_hook.get_jobs(max_concurrency, max_jobs)
+            except SlsCoreError as err:
+                span.record_exception(err)
+                log.error(f"SLS Core | Error getting jobs: {err}")
+                await asyncio.sleep(0.2) # sleep for a bit before trying again
+                continue
+
+            if len(jobs) == 0 or jobs is None:
+                span.add_event("No jobs acquired")
+                await asyncio.sleep(0)
+                continue
+
+            span.set_attribute("jobs_acquired_count", len(jobs))
+
+            for job in jobs:
+                with tracer.start_as_current_span("queue_job", kind=SpanKind.PRODUCER) as job_span:
+                    job_span.set_attribute("request_id", job.get("id"))
+                    job["context"] = job_span.get_span_context()
+                    asyncio.create_task(
+                        _process_job(config, job, serverless_hook), name=job["id"]
+                    )
+                    await asyncio.sleep(0)
+
             await asyncio.sleep(0)
-            continue
-
-        for job in jobs:
-            asyncio.create_task(
-                _process_job(config, job, serverless_hook), name=job["id"]
-            )
-            await asyncio.sleep(0)
-
-        await asyncio.sleep(0)
 
 
 def main(config: Dict[str, Any]) -> None:

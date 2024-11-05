@@ -58,6 +58,7 @@ async def _handle_result(
     """
     with tracer.start_as_current_span("handle_result", kind=SpanKind.SERVER) as span:
         span.set_attribute("request_id", job.get("id"))
+        span.set_attribute("is_stream", is_stream)
 
         try:
             serialized_job_data = json.dumps(job_data, ensure_ascii=False)
