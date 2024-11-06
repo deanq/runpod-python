@@ -6,8 +6,8 @@ import os
 import requests
 from aiohttp import ClientSession, ClientTimeout, TCPConnector, ClientResponseError
 from opentelemetry import trace
-# from opentelemetry.instrumentation.aiohttp_client import create_trace_config
-# from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from opentelemetry.instrumentation.aiohttp_client import create_trace_config
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
 
 from .cli.groups.config.functions import get_credentials
 from .user_agent import USER_AGENT
@@ -44,7 +44,7 @@ def AsyncClientSession(*args, **kwargs):
         connector=TCPConnector(limit=0),
         headers=get_auth_header(),
         timeout=ClientTimeout(600, ceil_threshold=400),
-        # trace_configs=[create_trace_config()],
+        trace_configs=[create_trace_config()],
         *args,
         **kwargs,
     )
@@ -54,4 +54,4 @@ class SyncClientSession(requests.Session):
     def __init__(self):
         super().__init__()
         self.headers.update(get_auth_header())
-        # RequestsInstrumentor().instrument(session=self)
+        RequestsInstrumentor().instrument(session=self)
