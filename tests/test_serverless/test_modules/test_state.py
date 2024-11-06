@@ -204,15 +204,3 @@ class TestJobsProgress(unittest.TestCase):
 
         job1 = self.jobs.get(id)
         assert job1 in self.jobs
-
-    def test_get_job_list(self):
-        assert not self.jobs.get_job_list()
-
-        job1 = {"id": "123"}
-        self.jobs.add(job1)
-
-        job2 = {"id": "456"}
-        self.jobs.add(job2)
-
-        assert self.jobs.get_job_count() == 2
-        assert not self.jobs.get_job_list().difference(("123","456",))

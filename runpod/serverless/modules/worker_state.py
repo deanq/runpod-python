@@ -72,9 +72,6 @@ class JobsProgress(Set[Job]):
             JobsProgress._instance = set.__new__(cls)
         return JobsProgress._instance
 
-    def __repr__(self) -> str:
-        return f"<{self.__class__.__name__}>: {self.get_job_list()}"
-
     def add(self, element: Any):
         """
         Adds a Job object to the set.
@@ -125,15 +122,6 @@ class JobsProgress(Set[Job]):
         for job in self:
             if job == element:
                 return job
-
-    def get_job_list(self) -> set[str]:
-        """
-        Returns the list of job IDs
-        """
-        if not self.get_job_count():
-            return set()
-
-        return set(str(job) for job in self)
 
     def get_job_count(self) -> int:
         """
