@@ -85,16 +85,18 @@ class Heartbeat:
             if test:
                 return
 
-    @tracer.start_as_current_span("send_ping")
+    @tracer.start_as_current_span("send_ping", kind=trace.SpanKind.CLIENT)
     def _send_ping(self):
         """
         Sends a heartbeat to the Runpod server.
         """
-        job_ids = job_progress.get_job_list()
-        ping_params = {"job_id": ",".join(job_ids), "runpod_version": runpod_version}
-
         span = trace.get_current_span()
-        span.set_attribute("request_id", job_ids)
+        job_ids = []
+        for job in job_progress:
+            span.add_event("ping", {"request_id": job.id})
+            job_ids.append(job.id)
+
+        ping_params = {"job_id": ",".join(job_ids), "runpod_version": runpod_version}
 
         try:
             result = self._session.get(

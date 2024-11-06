@@ -5,7 +5,7 @@ Handles getting stuff from environment variables and updating the global state l
 import os
 import time
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 from asyncio import Queue
 
 from .rp_logger import RunPodLogger
@@ -62,7 +62,7 @@ class Job:
 # ---------------------------------------------------------------------------- #
 #                                    Tracker                                   #
 # ---------------------------------------------------------------------------- #
-class JobsProgress(set):
+class JobsProgress(Set[Job]):
     """Track the state of current jobs in progress."""
 
     _instance = None
