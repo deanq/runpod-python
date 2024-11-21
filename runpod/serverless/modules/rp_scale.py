@@ -259,4 +259,4 @@ class JobScaler:
                 job_list.task_done()
 
                 # Job is no longer in progress
-                job_progress.remove(job["id"])
+                await job_progress.remove(job["id"])
