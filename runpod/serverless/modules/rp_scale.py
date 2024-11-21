@@ -241,7 +241,7 @@ class JobScaler:
             span.set_attribute("request_id", job.get("id"))
 
             try:
-                job_progress.add(job)
+                await job_progress.add(job)
 
                 await handle_job(session, self.config, job)
 
