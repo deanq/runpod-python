@@ -6,6 +6,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.sdk.resources import (
     Resource,
+    DEPLOYMENT_ENVIRONMENT,
     SERVICE_NAME,
     SERVICE_VERSION,
 )
@@ -20,6 +21,7 @@ trace.set_tracer_provider(
     TracerProvider(
         resource=Resource.create(
             {
+                DEPLOYMENT_ENVIRONMENT: os.getenv("ENV"),
                 RUNPOD_ENDPOINT_ID: os.getenv("RUNPOD_ENDPOINT_ID"),
                 RUNPOD_POD_ID: os.getenv("RUNPOD_POD_ID"),
                 SERVICE_NAME: "runpod-python-sdk",
@@ -31,8 +33,12 @@ trace.set_tracer_provider(
 
 tracer = trace.get_tracer_provider()
 
-if os.getenv("RUNPOD_LOG_LEVEL", "").lower() == "trace":
-    tracer.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
-
 if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
     tracer.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+
+elif os.getenv("RUNPOD_LOG_LEVEL", "").lower() == "trace":
+    tracer.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+
+else:
+    # Use NoOpTracerProvider to disable OTEL
+    trace.set_tracer_provider(trace.NoOpTracerProvider())
