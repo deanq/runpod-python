@@ -139,7 +139,7 @@ class JobScaler:
             try:
                 # Keep the connection to the blocking call up to 90 seconds
                 acquired_jobs = await asyncio.wait_for(
-                    get_job(session, jobs_needed), timeout=90
+                    get_job(session, jobs_needed), timeout=30
                 )
 
                 if not acquired_jobs:
