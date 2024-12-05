@@ -48,7 +48,6 @@ class JobScaler:
         self.config = config
 
         self.jobs_queue = asyncio.Queue(maxsize=self.current_concurrency)
-        self.set_scale()
 
     def set_scale(self):
         self.current_concurrency = self.concurrency_modifier(
@@ -57,11 +56,11 @@ class JobScaler:
 
         if self.jobs_queue and (self.current_concurrency == self.jobs_queue.maxsize):
             # no need to resize
-            log.debug(f"JobScaler | Current concurrency set to: {self.current_concurrency}")
+            log.debug(f"JobScaler.set_scale | Current concurrency set to: {self.current_concurrency}")
             return
 
         self.jobs_queue = asyncio.Queue(maxsize=self.current_concurrency)
-        log.debug(f"JobScaler | New concurrency set to: {self.current_concurrency}")
+        log.debug(f"JobScaler.set_scale | New concurrency set to: {self.current_concurrency}")
 
     def start(self):
         """
