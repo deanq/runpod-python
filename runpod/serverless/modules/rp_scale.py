@@ -10,7 +10,7 @@ from typing import Any, Dict
 from ...http_client import AsyncClientSession, ClientSession, TooManyRequests
 from .rp_job import get_job, handle_job
 from .rp_logger import RunPodLogger
-from .worker_state import JobsProgress
+from .worker_state import JobsProgress, IS_LOCAL_TEST
 
 log = RunPodLogger()
 job_progress = JobsProgress()
@@ -43,33 +43,43 @@ class JobScaler:
 
         self.jobs_queue = asyncio.Queue(maxsize=self.current_concurrency)
 
+        self.concurrency_modifier = _default_concurrency_modifier
+        self.jobs_fetcher = get_job
+        self.jobs_fetcher_timeout = 90
+        self.jobs_handler = handle_job
+
         if concurrency_modifier := config.get("concurrency_modifier"):
             self.concurrency_modifier = concurrency_modifier
-        else:
-            self.concurrency_modifier = _default_concurrency_modifier
+
+        if not IS_LOCAL_TEST:
+            # below cannot be changed unless local
+            return
 
         if jobs_fetcher := self.config.get("jobs_fetcher"):
             self.jobs_fetcher = jobs_fetcher
-        else:
-            self.jobs_fetcher = get_job
+
+        if jobs_fetcher_timeout := self.config.get("jobs_fetcher_timeout"):
+            self.jobs_fetcher_timeout = jobs_fetcher_timeout
 
         if jobs_handler := self.config.get("jobs_handler"):
             self.jobs_handler = jobs_handler
-        else:
-            self.jobs_handler = handle_job
 
-    def set_scale(self):
-        self.current_concurrency = self.concurrency_modifier(
-            self.current_concurrency
-        )
+    async def set_scale(self):
+        self.current_concurrency = self.concurrency_modifier(self.current_concurrency)
 
         if self.jobs_queue and (self.current_concurrency == self.jobs_queue.maxsize):
             # no need to resize
-            log.debug(f"JobScaler.set_scale | Current concurrency set to: {self.current_concurrency}")
             return
 
+        while self.current_occupancy() > 0:
+            # not safe to scale when jobs are in flight
+            await asyncio.sleep(1)
+            continue
+
         self.jobs_queue = asyncio.Queue(maxsize=self.current_concurrency)
-        log.debug(f"JobScaler.set_scale | New concurrency set to: {self.current_concurrency}")
+        log.debug(
+            f"JobScaler.set_scale | New concurrency set to: {self.current_concurrency}"
+        )
 
     def start(self):
         """
@@ -128,6 +138,15 @@ class JobScaler:
         log.info("Kill worker.")
         self._shutdown_event.set()
 
+    def current_occupancy(self) -> int:
+        current_queue_count = self.jobs_queue.qsize()
+        current_progress_count = job_progress.get_job_count()
+
+        log.debug(
+            f"JobScaler.status | concurrency: {self.current_concurrency}; queue: {current_queue_count}; progress: {current_progress_count}"
+        )
+        return current_progress_count + current_queue_count
+
     async def get_jobs(self, session: ClientSession):
         """
         Retrieve multiple jobs from the server in batches using blocking requests.
@@ -137,15 +156,9 @@ class JobScaler:
         Adds jobs to the JobsQueue
         """
         while self.is_alive():
-            self.set_scale()
+            await self.set_scale()
 
-            current_progress_count = job_progress.get_job_count()
-            log.debug(f"JobScaler.get_jobs | current Jobs in progress: {current_progress_count}")
-
-            current_queue_count = self.jobs_queue.qsize()
-            log.debug(f"JobScaler.get_jobs | current Jobs in queue: {current_queue_count}")
-
-            jobs_needed = self.current_concurrency - current_progress_count - current_queue_count
+            jobs_needed = self.current_concurrency - self.current_occupancy()
             if jobs_needed <= 0:
                 log.debug("JobScaler.get_jobs | Queue is full. Retrying soon.")
                 await asyncio.sleep(1)  # don't go rapidly
@@ -156,7 +169,8 @@ class JobScaler:
 
                 # Keep the connection to the blocking call up to 30 seconds
                 acquired_jobs = await asyncio.wait_for(
-                    self.jobs_fetcher(session, jobs_needed), timeout=30
+                    self.jobs_fetcher(session, jobs_needed),
+                    timeout=self.jobs_fetcher_timeout,
                 )
 
                 if not acquired_jobs:
@@ -171,7 +185,9 @@ class JobScaler:
                 log.info(f"Jobs in queue: {self.jobs_queue.qsize()}")
 
             except TooManyRequests:
-                log.debug(f"JobScaler.get_jobs | Too many requests. Debounce for 5 seconds.")
+                log.debug(
+                    f"JobScaler.get_jobs | Too many requests. Debounce for 5 seconds."
+                )
                 await asyncio.sleep(5)  # debounce for 5 seconds
             except asyncio.CancelledError:
                 log.debug("JobScaler.get_jobs | Request was cancelled.")
