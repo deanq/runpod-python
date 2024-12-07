@@ -17,10 +17,9 @@ from opentelemetry.trace import (
 from ...http_client import AsyncClientSession, ClientSession, TooManyRequests
 from .rp_job import get_job, handle_job
 from .rp_logger import RunPodLogger
-from .worker_state import JobsQueue, JobsProgress
+from .worker_state import JobsProgress, IS_LOCAL_TEST
 
 log = RunPodLogger()
-job_list = JobsQueue()
 job_progress = JobsProgress()
 tracer = get_tracer(__name__)
 
@@ -46,15 +45,49 @@ class JobScaler:
     """
 
     def __init__(self, config: Dict[str, Any]):
-        concurrency_modifier = config.get("concurrency_modifier")
-        if concurrency_modifier is None:
-            self.concurrency_modifier = _default_concurrency_modifier
-        else:
-            self.concurrency_modifier = concurrency_modifier
-
         self._shutdown_event = asyncio.Event()
         self.current_concurrency = 1
         self.config = config
+
+        self.jobs_queue = asyncio.Queue(maxsize=self.current_concurrency)
+
+        self.concurrency_modifier = _default_concurrency_modifier
+        self.jobs_fetcher = get_job
+        self.jobs_fetcher_timeout = 90
+        self.jobs_handler = handle_job
+
+        if concurrency_modifier := config.get("concurrency_modifier"):
+            self.concurrency_modifier = concurrency_modifier
+
+        if not IS_LOCAL_TEST:
+            # below cannot be changed unless local
+            return
+
+        if jobs_fetcher := self.config.get("jobs_fetcher"):
+            self.jobs_fetcher = jobs_fetcher
+
+        if jobs_fetcher_timeout := self.config.get("jobs_fetcher_timeout"):
+            self.jobs_fetcher_timeout = jobs_fetcher_timeout
+
+        if jobs_handler := self.config.get("jobs_handler"):
+            self.jobs_handler = jobs_handler
+
+    async def set_scale(self):
+        self.current_concurrency = self.concurrency_modifier(self.current_concurrency)
+
+        if self.jobs_queue and (self.current_concurrency == self.jobs_queue.maxsize):
+            # no need to resize
+            return
+
+        while self.current_occupancy() > 0:
+            # not safe to scale when jobs are in flight
+            await asyncio.sleep(1)
+            continue
+
+        self.jobs_queue = asyncio.Queue(maxsize=self.current_concurrency)
+        log.debug(
+            f"JobScaler.set_scale | New concurrency set to: {self.current_concurrency}"
+        )
 
     def start(self):
         """
@@ -113,6 +146,15 @@ class JobScaler:
         log.info("Kill worker.")
         self._shutdown_event.set()
 
+    def current_occupancy(self) -> int:
+        current_queue_count = self.jobs_queue.qsize()
+        current_progress_count = job_progress.get_job_count()
+
+        log.debug(
+            f"JobScaler.status | concurrency: {self.current_concurrency}; queue: {current_queue_count}; progress: {current_progress_count}"
+        )
+        return current_progress_count + current_queue_count
+
     async def get_jobs(self, session: ClientSession):
         """
         Retrieve multiple jobs from the server in batches using blocking requests.
@@ -122,39 +164,26 @@ class JobScaler:
         Adds jobs to the JobsQueue
         """
         while self.is_alive():
-            log.debug("JobScaler.get_jobs | Starting job acquisition.")
+            await self.set_scale()
 
-            self.current_concurrency = self.concurrency_modifier(
-                self.current_concurrency
-            )
-            log.debug(f"JobScaler.get_jobs | current Concurrency set to: {self.current_concurrency}")
-
-            current_progress_count = await job_progress.get_job_count()
-            log.debug(f"JobScaler.get_jobs | current Jobs in progress: {current_progress_count}")
-
-            current_queue_count = job_list.get_job_count()
-            log.debug(f"JobScaler.get_jobs | current Jobs in queue: {current_queue_count}")
-
-            jobs_needed = self.current_concurrency - current_progress_count - current_queue_count
+            jobs_needed = self.current_concurrency - self.current_occupancy()
             if jobs_needed <= 0:
                 log.debug("Queue is full. Retrying soon.")
                 await asyncio.sleep(1)  # don't go rapidly
                 continue
 
-            with tracer.start_as_current_span("get_jobs", kind=SpanKind.CLIENT) as span:
+            with tracer.start_as_current_span(
+                 "get_jobs", kind=SpanKind.CLIENT
+            ) as span:
                 span.set_attribute("batch_id", uuid1().hex)
-
+    
                 try:
-                    # TODO: metrics
-                    # {
-                    #     "jobs.current_concurrency": self.current_concurrency,
-                    #     "jobs.in_progress": job_progress.get_job_count(),
-                    #     "jobs.needed": jobs_needed,
-                    # }
+                    log.debug("JobScaler.get_jobs | Starting job acquisition.")
 
-                    # Keep the connection to the blocking call up to 30 seconds
+                    # Keep the connection to the blocking call with timeout
                     acquired_jobs = await asyncio.wait_for(
-                        get_job(session, jobs_needed), timeout=30
+                        self.jobs_fetcher(session, jobs_needed),
+                        timeout=self.jobs_fetcher_timeout,
                     )
 
                     if not acquired_jobs:
@@ -165,26 +194,31 @@ class JobScaler:
                     span.set_attribute("jobs_acquired_count", len(acquired_jobs))
 
                     for job in acquired_jobs:
-                        with tracer.start_as_current_span(
-                            "queue_job", kind=SpanKind.PRODUCER
-                        ) as job_span:
+                        with tracer.start_as_current_span("queue_job", kind=SpanKind.PRODUCER) as job_span:
                             job_span.set_attribute("request_id", job.get("id"))
                             job["context"] = job_span.get_span_context()
-                            await job_list.add_job(job)
 
-                    # TODO: metrics {"jobs.queued", job_list.get_job_count()}
-                    log.info(f"Jobs in queue: {job_list.get_job_count()}")
+                            await self.jobs_queue.put(job)
+                            job_progress.add(job)
+                            log.debug("Job Queued", job["id"])
 
-                except TooManyRequests as error:
+                    log.info(f"Jobs in queue: {self.jobs_queue.qsize()}")
+
+                except TooManyRequests:
                     span.add_event("Too many requests. Debounce for 5 seconds.")
+                    log.debug("JobScaler.get_jobs | Too many requests. Debounce for 5 seconds.")
                     await asyncio.sleep(5)  # debounce for 5 seconds
-                except asyncio.CancelledError as error:
+                except asyncio.CancelledError:
                     span.add_event("Request was cancelled")
+                    log.debug("JobScaler.get_jobs | Request was cancelled.")
+                    raise  # CancelledError is a BaseException
                 except TimeoutError as error:
                     span.add_event("Job acquisition timed out")
+                    log.debug("JobScaler.get_jobs | Job acquisition timed out. Retrying.")
                 except TypeError as error:
                     # worker waking up produces a JSON error here
                     span.record_exception(error)
+                    log.debug(f"JobScaler.get_jobs | Unexpected error: {error}.")
                 except Exception as error:
                     span.record_exception(error)
                     log.error(
@@ -202,10 +236,10 @@ class JobScaler:
         """
         tasks = []  # Store the tasks for concurrent job processing
 
-        while self.is_alive() or not job_list.empty():
+        while self.is_alive() or not self.jobs_queue.empty():
             # Fetch as many jobs as the concurrency allows
-            while len(tasks) < self.current_concurrency and not job_list.empty():
-                job = await job_list.get_job()
+            while len(tasks) < self.current_concurrency and not self.jobs_queue.empty():
+                job = await self.jobs_queue.get()
 
                 # Create a new task for each job and add it to the task list
                 task = asyncio.create_task(self.handle_job(session, job))
@@ -238,12 +272,12 @@ class JobScaler:
         with tracer.start_as_current_span(
             "handle_job", context=context, kind=SpanKind.CONSUMER
         ) as span:
-            span.set_attribute("request_id", job.get("id"))
 
             try:
-                await job_progress.add(job)
+                span.set_attribute("request_id", job.get("id"))
+                log.debug("Handling Job", job["id"])
 
-                await handle_job(session, self.config, job)
+                await self.jobs_handler(session, self.config, job)
 
                 if self.config.get("refresh_worker", False):
                     span.add_event("refresh_worker")
@@ -255,8 +289,10 @@ class JobScaler:
                 raise err
 
             finally:
-                # Inform JobsQueue of a task completion
-                job_list.task_done()
+                # Inform Queue of a task completion
+                self.jobs_queue.task_done()
 
                 # Job is no longer in progress
-                await job_progress.remove(job["id"])
+                job_progress.remove(job)
+
+                log.debug("Finished Job", job["id"])
