@@ -50,7 +50,7 @@ async def _transmit(client_session: ClientSession, url, job_data):
         await client_response.text()
 
 
-@tracer.start_as_current_span("handle_result", kind=trace.SpanKind.SERVER)
+@tracer.start_as_current_span("handle_result", kind=trace.SpanKind.CLIENT)
 async def _handle_result(
     session: ClientSession, job_data, job, url_template, log_message, is_stream=False
 ):

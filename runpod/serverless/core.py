@@ -187,7 +187,7 @@ class Hook:  # pylint: disable=too-many-instance-attributes
             )
         )
 
-    @tracer.start_as_current_span("handle_result", kind=trace.SpanKind.SERVER)
+    @tracer.start_as_current_span("handle_result", kind=trace.SpanKind.CLIENT)
     async def stream_output(self, job_id: str, job_output: bytes) -> bool:
         """
         send part of a streaming result to AI-API.
@@ -207,7 +207,7 @@ class Hook:  # pylint: disable=too-many-instance-attributes
             )
         )
 
-    @tracer.start_as_current_span("handle_result", kind=trace.SpanKind.SERVER)
+    @tracer.start_as_current_span("handle_result", kind=trace.SpanKind.CLIENT)
     def post_output(self, job_id: str, job_output: bytes) -> bool:
         """
         send the result of a job to AI-API.
