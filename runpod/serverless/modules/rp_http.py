@@ -7,6 +7,7 @@ import os
 
 from aiohttp import ClientError
 from aiohttp_retry import FibonacciRetry, RetryClient
+from opentelemetry import trace
 
 from runpod.http_client import ClientSession
 from runpod.serverless.modules.rp_logger import RunPodLogger
@@ -24,6 +25,7 @@ JOB_STREAM_URL_TEMPLATE = str(
 JOB_STREAM_URL = JOB_STREAM_URL_TEMPLATE.replace("$RUNPOD_POD_ID", WORKER_ID)
 
 log = RunPodLogger()
+tracer = trace.get_tracer(__name__)
 
 
 async def _transmit(client_session: ClientSession, url, job_data):
@@ -48,15 +50,18 @@ async def _transmit(client_session: ClientSession, url, job_data):
         await client_response.text()
 
 
+@tracer.start_as_current_span("handle_result", kind=trace.SpanKind.CLIENT)
 async def _handle_result(
     session: ClientSession, job_data, job, url_template, log_message, is_stream=False
 ):
     """
     A helper function to handle the result, either for sending or streaming.
     """
-    try:
-        session.headers["X-Request-ID"] = job["id"]
+    span = trace.get_current_span()
+    span.set_attribute("request_id", job.get("id"))
+    span.set_attribute("is_stream", is_stream)
 
+    try:
         serialized_job_data = json.dumps(job_data, ensure_ascii=False)
 
         is_stream = "true" if is_stream else "false"
@@ -66,9 +71,11 @@ async def _handle_result(
         log.debug(f"{log_message}", job["id"])
 
     except ClientError as err:
+        span.record_exception(err)
         log.error(f"Failed to return job results. | {err}", job["id"])
 
     except (TypeError, RuntimeError) as err:
+        span.record_exception(err)
         log.error(f"Error while returning job result. | {err}", job["id"])
 
     finally:
