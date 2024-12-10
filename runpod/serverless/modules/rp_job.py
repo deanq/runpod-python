@@ -131,6 +131,10 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
         job_result = {"output": []}
         async for stream_output in generator_output:
             log.debug(f"Stream output: {stream_output}", job["id"])
+            span.add_event(
+                "Stream output",
+                attributes={"stream_output": str(stream_output)},
+            )
             if stream_output.get("error"):
                 span.record_exception(stream_output)
                 span.set_status(trace.Status(trace.StatusCode.ERROR, str(stream_output)))
