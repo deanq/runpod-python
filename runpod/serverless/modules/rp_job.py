@@ -123,7 +123,7 @@ async def get_job(
 def _handle_error(err_output: any, job: dict) -> bool:
     span = trace.get_current_span()
 
-    span.record_exception(err_output)
+    span.record_exception(Exception(str(err_output)))
     span.set_status(trace.Status(trace.StatusCode.ERROR, str(err_output)))
     log.debug(f"Handled error: {err_output}", job["id"])
 
