@@ -135,10 +135,10 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
                 "Stream output",
                 attributes={"stream_output": str(stream_output)},
             )
-            if stream_output.get("error"):
-                span.record_exception(stream_output)
-                span.set_status(trace.Status(trace.StatusCode.ERROR, str(stream_output)))
-                await send_result(session, stream_output, job, is_stream=is_stream)
+            if err_output := stream_output["output"].get("error"):
+                span.record_exception(err_output)
+                span.set_status(trace.Status(trace.StatusCode.ERROR, str(err_output)))
+                await send_result(session, stream_output["output"], job, is_stream=is_stream)
                 break
             if config.get("return_aggregate_stream", False):
                 job_result["output"].append(stream_output["output"])
