@@ -127,7 +127,7 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
         job_result = {"output": []}
         async for stream_output in generator_output:
             log.debug(f"Stream output: {stream_output}", job["id"])
-            if "error" in stream_output:
+            if stream_output.get("error"):
                 job_result = stream_output
                 break
             if config.get("return_aggregate_stream", False):
