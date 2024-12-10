@@ -143,7 +143,19 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
             log.debug(f"Stream output: {stream_output}", job["id"])
             # end temp
 
-            if type(stream_output["output"]) == dict:
+            if stream_output.get("error"):
+                span.add_event(
+                    "Stream output has `error`",
+                    attributes={
+                        "stream_output": str(stream_output),
+                        "stream_output_type": str(type(stream_output)),
+                    },
+                )
+                _handle_error(stream_output, job)
+                job_result = stream_output
+                break
+
+            if type(stream_output.get("output")) == dict:
                 span.add_event(
                     "Stream output is dict",
                     attributes={
@@ -156,27 +168,15 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
                     job_result = stream_output
                     break
 
-            if type(stream_output["output"]) != str:
+            if type(stream_output.get("output")) != str:
                 span.add_event(
-                    "Stream output is not string",
+                    "Stream output is not string or dict",
                     attributes={
                         "stream_output": str(stream_output.get("output")),
                         "stream_output_type": str(type(stream_output.get("output"))),
                     },
                 )
                 _handle_error(stream_output["output"], job)
-                job_result = stream_output
-                break
-
-            if "error" in stream_output:
-                span.add_event(
-                    "Stream output has `error`",
-                    attributes={
-                        "stream_output": str(stream_output),
-                        "stream_output_type": str(type(stream_output)),
-                    },
-                )
-                _handle_error(stream_output, job)
                 job_result = stream_output
                 break
 
