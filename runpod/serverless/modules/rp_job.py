@@ -119,6 +119,15 @@ async def get_job(
             return jobs
 
 
+@tracer.start_as_current_span("handle_error")
+def _handle_error(err_output: any, job: dict) -> bool:
+    span = trace.get_current_span()
+
+    span.record_exception(err_output)
+    span.set_status(trace.Status(trace.StatusCode.ERROR, str(err_output)))
+    log.debug(f"Handled error: {err_output}", job["id"])
+
+
 @tracer.start_as_current_span("handle_job")
 async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) -> dict:
     span = trace.get_current_span()
@@ -130,16 +139,33 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
 
         job_result = {"output": []}
         async for stream_output in generator_output:
-            log.debug(f"Stream output: {stream_output}", job["id"])
+            # temp
+            log.debug(f"Stream output: {stream_output['output']}", job["id"])
             span.add_event(
                 "Stream output",
-                attributes={"stream_output": str(stream_output)},
+                attributes={
+                    "stream_output": str(stream_output["output"]),
+                    "stream_output_type": str(type(stream_output["output"])),
+                },
             )
-            if err_output := stream_output["output"].get("error"):
-                span.record_exception(err_output)
-                span.set_status(trace.Status(trace.StatusCode.ERROR, str(err_output)))
-                await send_result(session, stream_output["output"], job, is_stream=is_stream)
+            # end temp
+
+            if type(stream_output["output"]) == dict:
+                if error_output := stream_output.get("error"):
+                    _handle_error(error_output, job)
+                    job_result = stream_output
+                    break
+
+            if type(stream_output["output"]) != str:
+                _handle_error(stream_output["output"], job)
+                job_result = stream_output
                 break
+
+            if "error" in stream_output:
+                _handle_error(stream_output, job)
+                job_result = stream_output
+                break
+
             if config.get("return_aggregate_stream", False):
                 job_result["output"].append(stream_output["output"])
 
