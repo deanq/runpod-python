@@ -252,10 +252,18 @@ async def run_job_generator(
         if is_async_gen:
             async for output_partial in job_output:
                 log.debug(f"Async Generator output: {output_partial}", job["id"])
+                span.add_event(
+                    "Async generator output",
+                    attributes={"output_partial": str(output_partial)},
+                )
                 yield {"output": output_partial}
         else:
             for output_partial in job_output:
                 log.debug(f"Generator output: {output_partial}", job["id"])
+                span.add_event(
+                    "Async generator output",
+                    attributes={"output_partial": str(output_partial)},
+                )
                 yield {"output": output_partial}
 
     except Exception as err:
