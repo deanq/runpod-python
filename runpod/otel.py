@@ -2,7 +2,7 @@ import os
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace import TracerProvider, sampling
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.sdk.resources import (
     Resource,
@@ -19,6 +19,7 @@ from runpod.version import __version__ as runpod_version
 
 trace.set_tracer_provider(
     TracerProvider(
+        sampler=sampling.ALWAYS_ON,
         resource=Resource.create(
             {
                 DEPLOYMENT_ENVIRONMENT: os.getenv("ENV"),
