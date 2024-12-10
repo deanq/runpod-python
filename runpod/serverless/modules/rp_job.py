@@ -119,7 +119,11 @@ async def get_job(
             return jobs
 
 
+@tracer.start_as_current_span("handle_job")
 async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) -> dict:
+    span = trace.get_current_span()
+    span.set_attribute("request_id", job.get("id"))
+
     if is_generator(config["handler"]):
         is_stream = True
         generator_output = run_job_generator(config["handler"], job)
@@ -128,7 +132,9 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
         async for stream_output in generator_output:
             log.debug(f"Stream output: {stream_output}", job["id"])
             if stream_output.get("error"):
-                job_result = stream_output
+                span.record_exception(stream_output)
+                span.set_status(trace.Status(trace.StatusCode.ERROR, str(stream_output)))
+                await send_result(session, stream_output, job, is_stream=is_stream)
                 break
             if config.get("return_aggregate_stream", False):
                 job_result["output"].append(stream_output["output"])
@@ -252,18 +258,10 @@ async def run_job_generator(
         if is_async_gen:
             async for output_partial in job_output:
                 log.debug(f"Async Generator output: {output_partial}", job["id"])
-                span.add_event(
-                    "Async generator output",
-                    attributes={"output_partial": str(output_partial)},
-                )
                 yield {"output": output_partial}
         else:
             for output_partial in job_output:
                 log.debug(f"Generator output: {output_partial}", job["id"])
-                span.add_event(
-                    "Async generator output",
-                    attributes={"output_partial": str(output_partial)},
-                )
                 yield {"output": output_partial}
 
     except Exception as err:

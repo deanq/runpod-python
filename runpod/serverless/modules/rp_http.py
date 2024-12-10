@@ -87,6 +87,7 @@ async def _handle_result(
             log.info("Finished.", job["id"])
 
 
+@tracer.start_as_current_span("send_result")
 async def send_result(session, job_data, job, is_stream=False):
     """
     Return the job results.
@@ -96,6 +97,7 @@ async def send_result(session, job_data, job, is_stream=False):
     )
 
 
+@tracer.start_as_current_span("stream_result")
 async def stream_result(session, job_data, job):
     """
     Return the stream job results.
