@@ -140,28 +140,42 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
         job_result = {"output": []}
         async for stream_output in generator_output:
             # temp
-            log.debug(f"Stream output: {stream_output['output']}", job["id"])
-            span.add_event(
-                "Stream output",
-                attributes={
-                    "stream_output": str(stream_output["output"]),
-                    "stream_output_type": str(type(stream_output["output"])),
-                },
-            )
+            log.debug(f"Stream output: {stream_output}", job["id"])
             # end temp
 
             if type(stream_output["output"]) == dict:
+                span.add_event(
+                    "Stream output is dict",
+                    attributes={
+                        "stream_output": str(stream_output.get("output")),
+                        "stream_output_type": str(type(stream_output.get("output"))),
+                    },
+                )
                 if error_output := stream_output.get("error"):
                     _handle_error(error_output, job)
                     job_result = stream_output
                     break
 
             if type(stream_output["output"]) != str:
+                span.add_event(
+                    "Stream output is not string",
+                    attributes={
+                        "stream_output": str(stream_output.get("output")),
+                        "stream_output_type": str(type(stream_output.get("output"))),
+                    },
+                )
                 _handle_error(stream_output["output"], job)
                 job_result = stream_output
                 break
 
             if "error" in stream_output:
+                span.add_event(
+                    "Stream output has `error`",
+                    attributes={
+                        "stream_output": str(stream_output),
+                        "stream_output_type": str(type(stream_output)),
+                    },
+                )
                 _handle_error(stream_output, job)
                 job_result = stream_output
                 break
