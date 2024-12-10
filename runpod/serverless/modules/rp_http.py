@@ -28,10 +28,14 @@ log = RunPodLogger()
 tracer = trace.get_tracer(__name__)
 
 
+@tracer.start_as_current_span("transmit", kind=trace.SpanKind.CLIENT)
 async def _transmit(client_session: ClientSession, url, job_data):
     """
     Wrapper for transmitting results via POST.
     """
+    span = trace.get_current_span()
+    span.set_attribute("job_data", job_data)
+
     retry_options = FibonacciRetry(attempts=3)
     retry_client = RetryClient(
         client_session=client_session, retry_options=retry_options
