@@ -153,7 +153,7 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
                     },
                 )
                 if stream_output["output"].get("error"):
-                    stream_output = {"error": stream_output["output"]["error"]}
+                    stream_output = {"error": str(stream_output["output"]["error"])}
 
             if stream_output.get("error"):
                 span.add_event(
