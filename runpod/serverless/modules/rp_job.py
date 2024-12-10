@@ -142,7 +142,7 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
             log.debug(f"Stream output: {stream_output}", job["id"])
             # end temp
 
-            if stream_output.get("error"):
+            if error_output := stream_output.get("error"):
                 span.add_event(
                     "Stream output has `error`",
                     attributes={
@@ -151,7 +151,7 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
                     },
                 )
                 _handle_error(stream_output, job)
-                job_result = stream_output
+                job_result = error_output
                 break
 
             if type(stream_output.get("output")) == dict:
