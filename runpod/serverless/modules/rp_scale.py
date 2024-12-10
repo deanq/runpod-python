@@ -242,7 +242,7 @@ class JobScaler:
                 job = await self.jobs_queue.get()
 
                 # Create a new task for each job and add it to the task list
-                task = asyncio.create_task(self.handle_job(session, job))
+                task = asyncio.create_task(self.run_job(session, job))
                 tasks.append(task)
 
             # Wait for any job to finish
@@ -263,14 +263,14 @@ class JobScaler:
         # Ensure all remaining tasks finish before stopping
         await asyncio.gather(*tasks)
 
-    async def handle_job(self, session: ClientSession, job: dict):
+    async def run_job(self, session: ClientSession, job: dict):
         """
         Process an individual job. This function is run concurrently for multiple jobs.
         """
         context = set_span_in_context(NonRecordingSpan(job["context"]))
 
         with tracer.start_as_current_span(
-            "handle_job", context=context, kind=SpanKind.CONSUMER
+            "run_job", context=context, kind=SpanKind.CONSUMER
         ) as span:
 
             try:
