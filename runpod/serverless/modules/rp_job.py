@@ -140,42 +140,12 @@ async def handle_job(session: ClientSession, config: Dict[str, Any], job: dict) 
         async for stream_output in generator_output:
             # temp
             log.debug(f"Stream output: {stream_output}", job["id"])
-            # end temp
 
             if type(stream_output.get("output")) == dict:
-                span.add_event(
-                    "Stream output has `output.error`",
-                    attributes={
-                        "stream_output": str(stream_output),
-                        "stream_output_type": str(type(stream_output)),
-                        "stream_output_error": str(stream_output["output"].get("error")),
-                        "stream_output_error_type": str(type(stream_output["output"].get("error"))),
-                    },
-                )
                 if stream_output["output"].get("error"):
                     stream_output = {"error": str(stream_output["output"]["error"])}
 
             if stream_output.get("error"):
-                span.add_event(
-                    "Stream output has `error`",
-                    attributes={
-                        "stream_output": str(stream_output),
-                        "stream_output_type": str(type(stream_output)),
-                    },
-                )
-                _handle_error(stream_output, job)
-                job_result = stream_output
-                break
-
-            if type(stream_output.get("output")) != str:
-                span.add_event(
-                    "Stream output is not string or dict",
-                    attributes={
-                        "stream_output": str(stream_output.get("output")),
-                        "stream_output_type": str(type(stream_output.get("output"))),
-                    },
-                )
-                _handle_error(stream_output["output"], job)
                 job_result = stream_output
                 break
 
