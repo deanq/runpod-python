@@ -46,12 +46,12 @@ def start():
     if OTEL_COLLECTOR:
         tracer.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
         trace.set_tracer_provider(tracer)
-        print("OpenTelemetry is on")
+        print(f"OpenTelemetry is on: {sampler.get_description()}")
 
     elif RUNPOD_ENV == "local":
         tracer.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
         trace.set_tracer_provider(tracer)
-        print("Console tracing is on")
+        print(f"Console tracing is on: {sampler.get_description()}")
 
     else:
         # Use NoOpTracerProvider to disable OTEL
