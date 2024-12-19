@@ -7,8 +7,7 @@ import asyncio
 import os
 from typing import Any, Dict
 
-from runpod import otel
-from runpod.serverless.modules import rp_logger, rp_local, rp_ping, rp_scale
+from runpod.serverless.modules import rp_logger, rp_local, rp_ping, rp_scale, rp_tracer
 
 log = rp_logger.RunPodLogger()
 heartbeat = rp_ping.Heartbeat()
@@ -36,7 +35,7 @@ def run_worker(config: Dict[str, Any]) -> None:
     Args:
         config (Dict[str, Any]): Configuration parameters for the worker.
     """
-    otel.start()
+    rp_tracer.start()
 
     # Start pinging RunPod to show that the worker is alive.
     heartbeat.start_ping()
