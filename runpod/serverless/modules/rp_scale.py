@@ -6,6 +6,13 @@ Provides the functionality for scaling the runpod serverless worker.
 import asyncio
 import signal
 from typing import Any, Dict
+from uuid import uuid1  # traceable to machine's MAC address + timestamp
+from opentelemetry.trace import (
+    get_tracer,
+    set_span_in_context,
+    SpanKind,
+    NonRecordingSpan,
+)
 
 from ...http_client import AsyncClientSession, ClientSession, TooManyRequests
 from .rp_job import get_job, handle_job
@@ -14,6 +21,7 @@ from .worker_state import JobsProgress, IS_LOCAL_TEST
 
 log = RunPodLogger()
 job_progress = JobsProgress()
+tracer = get_tracer(__name__)
 
 
 def _default_concurrency_modifier(current_concurrency: int) -> int:
@@ -160,49 +168,65 @@ class JobScaler:
 
             jobs_needed = self.current_concurrency - self.current_occupancy()
             if jobs_needed <= 0:
-                log.debug("JobScaler.get_jobs | Queue is full. Retrying soon.")
+                log.debug("Queue is full. Retrying soon.")
                 await asyncio.sleep(1)  # don't go rapidly
                 continue
 
-            try:
-                log.debug("JobScaler.get_jobs | Starting job acquisition.")
+            with tracer.start_as_current_span(
+                 "get_jobs", kind=SpanKind.CLIENT
+            ) as span:
+                span.set_attribute("batch_id", uuid1().hex)
+    
+                try:
+                    log.debug("JobScaler.get_jobs | Starting job acquisition.")
 
-                # Keep the connection to the blocking call with timeout
-                acquired_jobs = await asyncio.wait_for(
-                    self.jobs_fetcher(session, jobs_needed),
-                    timeout=self.jobs_fetcher_timeout,
-                )
+                    # Keep the connection to the blocking call with timeout
+                    acquired_jobs = await asyncio.wait_for(
+                        self.jobs_fetcher(session, jobs_needed),
+                        timeout=self.jobs_fetcher_timeout,
+                    )
 
-                if not acquired_jobs:
-                    log.debug("JobScaler.get_jobs | No jobs acquired.")
-                    continue
+                    if not acquired_jobs:
+                        span.add_event("No jobs acquired")
+                        log.debug("No jobs acquired")
+                        continue
 
-                for job in acquired_jobs:
-                    await self.jobs_queue.put(job)
-                    job_progress.add(job)
-                    log.debug("Job Queued", job["id"])
+                    span.set_attribute("jobs_acquired_count", len(acquired_jobs))
 
-                log.info(f"Jobs in queue: {self.jobs_queue.qsize()}")
+                    for job in acquired_jobs:
+                        with tracer.start_as_current_span("queue_job", kind=SpanKind.PRODUCER) as job_span:
+                            job_span.set_attribute("request_id", job.get("id"))
+                            job["context"] = job_span.get_span_context()
 
-            except TooManyRequests:
-                log.debug(
-                    f"JobScaler.get_jobs | Too many requests. Debounce for 5 seconds."
-                )
-                await asyncio.sleep(5)  # debounce for 5 seconds
-            except asyncio.CancelledError:
-                log.debug("JobScaler.get_jobs | Request was cancelled.")
-                raise  # CancelledError is a BaseException
-            except TimeoutError:
-                log.debug("JobScaler.get_jobs | Job acquisition timed out. Retrying.")
-            except TypeError as error:
-                log.debug(f"JobScaler.get_jobs | Unexpected error: {error}.")
-            except Exception as error:
-                log.error(
-                    f"Failed to get job. | Error Type: {type(error).__name__} | Error Message: {str(error)}"
-                )
-            finally:
-                # Yield control back to the event loop
-                await asyncio.sleep(0)
+                            await self.jobs_queue.put(job)
+                            job_progress.add(job)
+                            log.debug("Job Queued", job["id"])
+
+                    log.info(f"Jobs in queue: {self.jobs_queue.qsize()}")
+
+                except TooManyRequests:
+                    span.add_event("Too many requests. Debounce for 5 seconds.")
+                    log.debug("JobScaler.get_jobs | Too many requests. Debounce for 5 seconds.")
+                    await asyncio.sleep(5)  # debounce for 5 seconds
+                except asyncio.CancelledError:
+                    span.add_event("Request was cancelled")
+                    log.debug("JobScaler.get_jobs | Request was cancelled.")
+                    raise  # CancelledError is a BaseException
+                except TimeoutError as error:
+                    span.add_event("Job acquisition timed out")
+                    log.debug("JobScaler.get_jobs | Job acquisition timed out. Retrying.")
+                except TypeError as error:
+                    # worker waking up produces a JSON error here
+                    span.record_exception(error)
+                    log.debug(f"JobScaler.get_jobs | Unexpected error: {error}.")
+                except Exception as error:
+                    span.record_exception(error)
+                    log.error(
+                        f"Failed to get job. | Error Type: {type(error).__name__} | Error Message: {str(error)}"
+                    )
+                finally:
+                    # Yield control back to the event loop
+                    await asyncio.sleep(0)
 
     async def run_jobs(self, session: ClientSession):
         """
@@ -218,11 +242,12 @@ class JobScaler:
                 job = await self.jobs_queue.get()
 
                 # Create a new task for each job and add it to the task list
-                task = asyncio.create_task(self.handle_job(session, job))
+                task = asyncio.create_task(self.perform_job(session, job))
                 tasks.append(task)
 
             # Wait for any job to finish
             if tasks:
+                # TODO: metrics {"jobs.in_progress", len(tasks)}
                 log.info(f"Jobs in progress: {len(tasks)}")
 
                 done, pending = await asyncio.wait(
@@ -238,27 +263,36 @@ class JobScaler:
         # Ensure all remaining tasks finish before stopping
         await asyncio.gather(*tasks)
 
-    async def handle_job(self, session: ClientSession, job: dict):
+    async def perform_job(self, session: ClientSession, job: dict):
         """
         Process an individual job. This function is run concurrently for multiple jobs.
         """
-        try:
-            log.debug("Handling Job", job["id"])
+        context = set_span_in_context(NonRecordingSpan(job["context"]))
 
-            await self.jobs_handler(session, self.config, job)
+        with tracer.start_as_current_span(
+            "perform_job", context=context, kind=SpanKind.CONSUMER
+        ) as span:
 
-            if self.config.get("refresh_worker", False):
-                self.kill_worker()
+            try:
+                span.set_attribute("request_id", job.get("id"))
+                log.debug("Handling Job", job["id"])
 
-        except Exception as err:
-            log.error(f"Error handling job: {err}", job["id"])
-            raise err
+                await self.jobs_handler(session, self.config, job)
 
-        finally:
-            # Inform Queue of a task completion
-            self.jobs_queue.task_done()
+                if self.config.get("refresh_worker", False):
+                    span.add_event("refresh_worker")
+                    self.kill_worker()
 
-            # Job is no longer in progress
-            job_progress.remove(job)
+            except Exception as err:
+                span.record_exception(err)
+                log.error(f"Error handling job: {err}", job["id"])
+                raise err
 
-            log.debug("Finished Job", job["id"])
+            finally:
+                # Inform Queue of a task completion
+                self.jobs_queue.task_done()
+
+                # Job is no longer in progress
+                job_progress.remove(job)
+
+                log.debug("Finished Job", job["id"])

@@ -20,6 +20,7 @@ extras_require = {
         "nest_asyncio",
         "pytest",
         "pytest-cov",
+        "pytest-env",
         "pytest-timeout",
         "pytest-asyncio",
     ]

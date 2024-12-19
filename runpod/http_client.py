@@ -1,14 +1,18 @@
 """
-HTTP Client abstractions
+HTTP Client abstractions with OpenTelemetry tracing support.
 """
 
 import os
-
 import requests
 from aiohttp import ClientSession, ClientTimeout, TCPConnector, ClientResponseError
+from opentelemetry import trace
+from opentelemetry.instrumentation.aiohttp_client import create_trace_config
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
 
 from .cli.groups.config.functions import get_credentials
 from .user_agent import USER_AGENT
+
+tracer = trace.get_tracer(__name__)
 
 
 class TooManyRequests(ClientResponseError):
@@ -32,22 +36,23 @@ def get_auth_header():
     }
 
 
-def AsyncClientSession(*args, **kwargs):  # pylint: disable=invalid-name
+def AsyncClientSession(*args, **kwargs):
     """
-    Deprecation from aiohttp.ClientSession forbids inheritance.
-    This is now a factory method
+    Factory method for an async client session with OpenTelemetry tracing.
     """
     return ClientSession(
         connector=TCPConnector(limit=0),
         headers=get_auth_header(),
         timeout=ClientTimeout(600, ceil_threshold=400),
+        trace_configs=[create_trace_config()],
         *args,
         **kwargs,
     )
 
 
 class SyncClientSession(requests.Session):
-    """
-    Inherits requests.Session to override `request()` method for tracing
-    """
-    pass
+    def __init__(self):
+        super().__init__()
+        self.headers.update(get_auth_header())
+
+RequestsInstrumentor().instrument()

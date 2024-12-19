@@ -17,3 +17,9 @@ tomlkit >= 0.12.2
 tqdm-loggable >= 0.1.4
 urllib3 >= 1.26.6
 watchdog >= 3.0.0
+
+setuptools==65.6.3
+opentelemetry-sdk
+opentelemetry-exporter-otlp
+opentelemetry-instrumentation-aiohttp-client
+opentelemetry-instrumentation-requests
