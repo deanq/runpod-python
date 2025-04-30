@@ -3,6 +3,7 @@ import math
 from faker import Faker
 from typing import Any, Dict, Optional, List
 
+from runpod.serverless.modules import rp_tracer
 from runpod.serverless.modules.rp_scale import JobScaler, RunPodLogger, JobsProgress
 
 fake = Faker()
@@ -60,4 +61,5 @@ job_scaler = JobScaler(
         "jobs_handler": fake_handle_job,
     }
 )
+rp_tracer.start()
 job_scaler.start()

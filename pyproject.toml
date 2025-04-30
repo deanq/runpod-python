@@ -57,6 +57,7 @@ test = [
     "faker",
     "pytest-asyncio",
     "pytest-cov",
+    "pytest-env",
     "pytest-timeout",
     "pytest-watch",
     "pytest",
