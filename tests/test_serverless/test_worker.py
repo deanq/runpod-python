@@ -4,6 +4,7 @@
 
 import argparse
 import os
+import sys
 from unittest import mock
 from unittest.mock import patch, mock_open, Mock, MagicMock
 
@@ -12,6 +13,7 @@ import nest_asyncio
 
 import runpod
 from runpod.serverless.modules.rp_logger import RunPodLogger
+from runpod.serverless.modules.rp_scale import _handle_uncaught_exception
 from runpod.serverless import _signal_handler
 
 nest_asyncio.apply()
@@ -186,6 +188,9 @@ class TestRunWorker(IsolatedAsyncioTestCase):
             "refresh_worker": True,
             "rp_args": {"rp_debugger": True, "rp_log_level": "DEBUG"},
         }
+
+    async def asyncTearDown(self):
+        sys.excepthook = sys.__excepthook__
 
     @patch("runpod.serverless.modules.rp_scale.AsyncClientSession")
     @patch("runpod.serverless.modules.rp_scale.get_job")
@@ -532,14 +537,23 @@ class TestRunWorker(IsolatedAsyncioTestCase):
         ):
             runpod.serverless.start(config)
 
-    # Test with sls-core
-    async def test_run_worker_with_sls_core(self):
-        """
-        Test run_worker with sls-core.
-        """
-        with patch("runpod.serverless.core.main") as mock_main:
-            os.environ["RUNPOD_USE_CORE"] = "true"
-            runpod.serverless.start(self.config)
-            os.environ.pop("RUNPOD_USE_CORE")
+    @patch("runpod.serverless.signal.signal")
+    @patch("runpod.serverless.worker.rp_scale.JobScaler.run")
+    def test_start_sets_excepthook(self, _, __):
+        runpod.serverless.start({})
+        assert sys.excepthook == _handle_uncaught_exception
 
-            assert mock_main.called
+    @patch("runpod.serverless.signal.signal")
+    @patch("runpod.serverless.rp_fastapi.WorkerAPI.start_uvicorn")
+    @patch("runpod.serverless._set_config_args")
+    def test_start_does_not_set_excepthook(self, mock_set_config_args, _, __):
+        mock_set_config_args.return_value = self.config
+        self.config.update({"rp_args": {
+            "rp_serve_api": True,
+            "rp_api_host": "localhost",
+            "rp_api_port": 8000,
+            "rp_api_concurrency": 1,
+        }})
+
+        runpod.serverless.start(self.config)
+        assert sys.excepthook != _handle_uncaught_exception

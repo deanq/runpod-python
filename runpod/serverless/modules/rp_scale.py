@@ -5,6 +5,8 @@ Provides the functionality for scaling the runpod serverless worker.
 
 import asyncio
 import signal
+import sys
+import traceback
 from typing import Any, Dict
 from uuid import uuid1  # traceable to machine's MAC address + timestamp
 from opentelemetry.trace import (
@@ -22,6 +24,11 @@ from .worker_state import JobsProgress, IS_LOCAL_TEST
 log = RunPodLogger()
 job_progress = JobsProgress()
 tracer = get_tracer(__name__)
+
+
+def _handle_uncaught_exception(exc_type, exc_value, exc_traceback):
+    exc = traceback.format_exception(exc_type, exc_value, exc_traceback)
+    log.error(f"Uncaught exception | {exc}")
 
 
 def _default_concurrency_modifier(current_concurrency: int) -> int:
@@ -95,6 +102,8 @@ class JobScaler:
         when the user sends a SIGTERM or SIGINT signal. This is typically
         the case when the worker is running in a container.
         """
+        sys.excepthook = _handle_uncaught_exception
+
         try:
             # Register signal handlers for graceful shutdown
             signal.signal(signal.SIGTERM, self.handle_shutdown)
@@ -143,7 +152,7 @@ class JobScaler:
         """
         Whether to kill the worker.
         """
-        log.info("Kill worker.")
+        log.debug("Kill worker.")
         self._shutdown_event.set()
 
     def current_occupancy(self) -> int:

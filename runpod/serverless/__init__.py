@@ -10,10 +10,7 @@ import os
 import signal
 import sys
 import time
-import typing
 from typing import Any, Dict
-
-from runpod.serverless import core
 
 from ..version import __version__ as runpod_version
 from . import worker
@@ -22,12 +19,6 @@ from .modules.rp_logger import RunPodLogger
 from .modules.rp_progress import progress_update
 
 log = RunPodLogger()
-
-
-def handle_uncaught_exception(exc_type, exc_value, exc_traceback):
-    log.error(f"Uncaught exception | {exc_type}; {exc_value}; {exc_traceback};")
-
-sys.excepthook = handle_uncaught_exception
 
 
 # ---------------------------------------------------------------------------- #
@@ -178,17 +169,5 @@ def start(config: Dict[str, Any]):
         )
         return
 
-    # --------------------------------- SLS-Core --------------------------------- #
-
-    if os.getenv("RUNPOD_SLS_CORE") is None and os.getenv("RUNPOD_USE_CORE") is not None:
-            log.warn("RUNPOD_USE_CORE is deprecated. Please use RUNPOD_SLS_CORE instead.")
-            core.main(config)
-            return
-
-    elif os.getenv("RUNPOD_SLS_CORE","false").lower() in ["1", "t", "true"]:
-            core.main(config)
-            return
-
-    # --------------------------------- Standard --------------------------------- #
     worker.main(config)
     return
